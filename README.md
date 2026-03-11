@@ -25,3 +25,19 @@
 
 ---
 *This is a living document. Updated daily.*
+
+## Automated Tools
+
+### Market Alert Bot (`bots/`)
+- **Alert Bot:** Monitors funding rates & price levels, sends Telegram alerts
+- **Daily Snapshot:** Fetches market data every morning at 8 AM, saves to repo
+- **Cost:** $0 (uses free Binance + Hyperliquid APIs)
+
+### Setup
+```bash
+cd bots
+./setup.sh
+export TELEGRAM_BOT_TOKEN='your_token'
+export TELEGRAM_CHAT_ID='your_chat_id'
+python3 market_monitor.py
+```
