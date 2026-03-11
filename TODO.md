@@ -18,33 +18,46 @@
 
 ---
 
-## Phase 1: Exchange Expansion + Asset Coverage (Week 1)
+## Phase 1: Opportunity-First Alert System (Week 1)
 
-Priority: HIGH — More exchanges = more arb opportunities
+Priority: HIGH — Only alert when there's actual alpha
 
-### Exchanges
-| Exchange | Funding | OI | Spot | Status |
-|----------|---------|-----|------|--------|
-| Binance | ✅ | ✅ | ✅ | Live |
-| Hyperliquid | ✅ | ✅ | ❌ | Live |
-| Bybit | 🔄 | 🔄 | 🔄 | Todo |
-| OKX | 🔄 | 🔄 | 🔄 | Todo |
-| dYdX | 🔄 | 🔄 | ❌ | Todo |
-| Aevo | 🔄 | 🔄 | ❌ | Todo |
-| Deribit | 🔄 | 🔄 | ❌ | Todo (options) |
+### Alert Philosophy
+**OLD:** Monitor fixed assets (BTC, ETH, SOL...)  
+**NEW:** Scan ALL markets, rank by opportunity size, only alert top 3
 
-### Assets to Monitor
-| Asset | Priority | Why |
-|-------|----------|-----|
-| BTC | ✅ Live | Highest liquidity, best arb |
-| ETH | 🔥 Next | Second largest, funding diverges often |
-| SOL | 🔄 Todo | High volatility = funding spikes |
-| ARB | 🔄 Todo | Layer 2 narrative, OI growing |
-| LINK | 🔄 Todo | Oracle plays, institutional interest |
-| DOGE | 🔄 Todo | Meme volatility, extreme funding |
-| HYPE | 🔄 Todo | Native token, exchange-specific edge |
+### Opportunity Score Formula
+```
+Score = |Funding Spread| × OI × Liquidity Factor
 
-**Deliverable:** Cross-exchange funding spread alerts for top 5 assets
+Where:
+- Funding Spread = Max(funding) - Min(funding) across exchanges
+- OI = Total Open Interest (notional)
+- Liquidity Factor = 1 for majors, 0.7 for mid-caps, 0.4 for alts
+
+Threshold: Only alert if Score > 0.05 (significant edge)
+```
+
+### Alert Tiers
+
+| Tier | Trigger | Action |
+|------|---------|--------|
+| **🔥 HIGH** | Funding spread >0.15% + OI >$100M | Immediate Telegram alert |
+| **⚠️ MEDIUM** | Funding spread 0.08-0.15% | Batch in hourly digest |
+| **📊 LOW** | Funding spread <0.08% | Log only, no alert |
+
+### What Gets Scanned
+- **ALL perpetual markets** on Binance, Hyperliquid, Bybit, OKX
+- **Not just majors** — any coin with funding divergence
+- **Dynamic ranking** — opportunities change, alerts follow
+
+### Special BTC Alerts (Always On)
+- Support break <$65K
+- Resistance break >$75K
+- >5% move in 1h
+- OI spike >20% (potential squeeze)
+
+**Deliverable:** Only actionable alerts, zero noise
 
 ---
 
@@ -143,3 +156,76 @@ How do we know if the bot is good?
 ---
 
 *This is a living document. Updated daily as we iterate.*
+
+---
+
+## NEW: Opportunity-First Alert Logic (Priority Update)
+
+### Philosophy Change
+**FROM:** Monitor fixed list of coins  
+**TO:** Scan all markets, rank by opportunity size, alert only actionable setups
+
+### Opportunity Score Algorithm
+
+```python
+# Score = Potential daily profit adjusted for risk
+opportunity_score = funding_spread * oi_notional * liquidity_factor
+
+# Thresholds for alerting:
+# - HIGH: score > 0.10 (immediate alert)
+# - MEDIUM: score 0.05-0.10 (hourly digest)
+# - LOW: score < 0.05 (logged only)
+
+# Where:
+# funding_spread = max(funding) - min(funding) across exchanges
+# oi_notional = open_interest * mark_price
+# liquidity_factor = 1.0 (BTC/ETH), 0.7 (SOL/LINK), 0.5 (alts), 0.3 (exotics)
+```
+
+### Dynamic Market Coverage
+
+| Market Cap | Min Spread to Alert | Examples |
+|------------|---------------------|----------|
+| Majors (>$10B) | 0.08% | BTC, ETH |
+| Mid-caps ($1-10B) | 0.12% | SOL, LINK, ARB |
+| Small-caps ($100M-1B) | 0.20% | DOGE, HYPE |
+| Micro-caps (<$100M) | 0.30% | New listings, memes |
+
+### Alert Format (Updated)
+
+```
+🔥 HIGH PRIORITY ARB OPPORTUNITY
+
+PEPE-PERP
+═══════════════════════════════════
+Funding Rates:
+  • Binance:  -0.185% ⭐ BEST (PAID to long)
+  • Bybit:    -0.042%
+  • Hyperliq: -0.089%
+  
+Spread: 0.143% | OI: $420M | Score: 0.60
+
+💡 Trade: Long Binance (earn 0.185% / 8h)
+   Hedge: Short on Hyperliquid or spot
+   
+⚠️ Risk: Meme coin, high volatility
+   Required: $X margin for $Y position
+
+⏰ Next funding: 2h 14m
+```
+
+### BTC Always-On Alerts
+
+Regardless of opportunity score, always alert on:
+- Price breaks ($65K / $75K)
+- >5% move in 1h
+- OI spike >20%
+- Funding extreme (>±0.2%)
+
+### Implementation Priority
+
+1. **Day 2:** Bybit API + Opportunity ranking logic
+2. **Day 3:** Multi-coin scanning (not just BTC)
+3. **Day 4:** Score-based alerting (only HIGH priority)
+4. **Day 5:** Backtest: Did yesterday's alerts work?
+
