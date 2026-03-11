@@ -237,7 +237,7 @@ async def run_monitor():
         except Exception as e:
             print(f"  [ERROR] {e}")
         
-        await asyncio.sleep(30)  # 30 second intervals
+        await asyncio.sleep(5)  # 5 second intervals
 
 if __name__ == "__main__":
     asyncio.run(run_monitor())
