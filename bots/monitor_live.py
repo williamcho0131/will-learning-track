@@ -21,11 +21,14 @@ THRESHOLDS = {
     'btc_support': 65000,
     'btc_resistance': 75000,
     'price_change_1h': 0.05,     # 5% move
+    'oi_change_pct': 0.10,       # 10% OI change
+    'oi_large_value': 50000000000,  # $50B notional OI
 }
 
 # Track state
 cooldowns = {}
 last_prices = {'btc': 0, 'eth': 0}
+last_oi = {'hl_btc': 0}  # Track OI for change alerts
 
 async def send_message(text):
     """Send Telegram message"""
@@ -157,6 +160,34 @@ async def check_alerts(binance_data, binance_funding, hl_data):
         )
         alerts_sent.append('large_move')
     
+    # 4. Open Interest alerts
+    global last_oi
+    btc_price = binance_data['price']
+    oi_contracts = hl_data['oi']  # Number of BTC contracts
+    oi_notional = oi_contracts * btc_price  # Dollar value
+    
+    # Log current OI
+    print(f"  OI: {oi_contracts:,.0f} BTC (${oi_notional/1e9:.2f}B notional)")
+    
+    # Check for OI spike (if we have previous data)
+    if last_oi['hl_btc'] > 0:
+        oi_change = (oi_notional - last_oi['hl_btc']) / last_oi['hl_btc']
+        if abs(oi_change) > THRESHOLDS['oi_change_pct'] and check_cooldown('oi_spike', 60):
+            direction = "📈 Rising" if oi_change > 0 else "📉 Falling"
+            emoji = "🚨" if abs(oi_change) > 0.20 else "⚠️"
+            await send_message(
+                f"{emoji} <b>OI Spike Alert: Hyperliquid</b>\n\n"
+                f"{direction} fast!\n"
+                f"Change: {oi_change*100:+.1f}%\n"
+                f"Current OI: {oi_contracts:,.0f} BTC\n"
+                f"Notional: ${oi_notional/1e9:.2f}B\n\n"
+                f"💡 High OI + Funding rate = Watch for squeeze"
+            )
+            alerts_sent.append('oi_spike')
+    
+    # Update last OI
+    last_oi['hl_btc'] = oi_notional
+    
     return alerts_sent
 
 async def run_monitor():
@@ -173,7 +204,8 @@ async def run_monitor():
         "• BTC price levels ($65K-$75K)\n"
         "• Funding rates (±0.1% alerts)\n"
         "• Arb opportunities (<-0.05%)\n"
-        "• Large price moves (±5%)\n\n"
+        "• Large price moves (±5%)\n"
+        "• OI spikes (±10% change)\n\n"
         f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} UTC"
     )
     
@@ -189,12 +221,16 @@ async def run_monitor():
             hl_data = await get_hyperliquid_data()
             
             if binance_data and hl_data:
+                # Calculate OI for display
+                oi_contracts = hl_data['oi']
+                oi_notional = oi_contracts * binance_data['price']
+                
                 # Check alerts
                 alerts = await check_alerts(binance_data, binance_funding, hl_data)
                 if alerts:
                     print(f"  Alerts sent: {', '.join(alerts)}")
                 else:
-                    print(f"  No alerts (BTC: ${binance_data['price']:,.0f})")
+                    print(f"  BTC: ${binance_data['price']:,.0f} | OI: {oi_contracts:,.0f} BTC (${oi_notional/1e9:.2f}B)")
             else:
                 print(f"  ⚠️ Data fetch failed")
             
