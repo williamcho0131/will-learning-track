@@ -18,10 +18,11 @@
 
 ---
 
-## Phase 1: Exchange Expansion (Week 1)
+## Phase 1: Exchange Expansion + Asset Coverage (Week 1)
 
 Priority: HIGH — More exchanges = more arb opportunities
 
+### Exchanges
 | Exchange | Funding | OI | Spot | Status |
 |----------|---------|-----|------|--------|
 | Binance | ✅ | ✅ | ✅ | Live |
@@ -32,7 +33,18 @@ Priority: HIGH — More exchanges = more arb opportunities
 | Aevo | 🔄 | 🔄 | ❌ | Todo |
 | Deribit | 🔄 | 🔄 | ❌ | Todo (options) |
 
-**Deliverable:** Cross-exchange funding spread alerts
+### Assets to Monitor
+| Asset | Priority | Why |
+|-------|----------|-----|
+| BTC | ✅ Live | Highest liquidity, best arb |
+| ETH | 🔥 Next | Second largest, funding diverges often |
+| SOL | 🔄 Todo | High volatility = funding spikes |
+| ARB | 🔄 Todo | Layer 2 narrative, OI growing |
+| LINK | 🔄 Todo | Oracle plays, institutional interest |
+| DOGE | 🔄 Todo | Meme volatility, extreme funding |
+| HYPE | 🔄 Todo | Native token, exchange-specific edge |
+
+**Deliverable:** Cross-exchange funding spread alerts for top 5 assets
 
 ---
 
