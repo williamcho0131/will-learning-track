@@ -1,0 +1,53 @@
+# Funding Arbitrage Alert Bot Configuration
+# Copy this file to config.yaml and customize
+
+exchanges:
+  - binance
+  - hyperliquid
+  # Add more as they become available:
+  # - bybit
+  # - okx
+  # - dydx
+
+# Telegram configuration
+# You can also use environment variables:
+# TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID
+telegram:
+  token: ""  # Get from @BotFather
+  chat_id: ""  # Get from @userinfobot
+
+# Opportunity thresholds by asset class
+# Higher thresholds for smaller/less liquid assets
+thresholds:
+  major: 0.0008    # 0.08% - BTC, ETH
+  mid: 0.0012      # 0.12% - SOL, LINK, ARB
+  alt: 0.0020      # 0.20% - DOGE, HYPE
+  exotic: 0.0030   # 0.30% - Memes, new listings
+
+# Scanning behavior
+scanning:
+  interval_seconds: 5      # How often to scan
+  cooldown_minutes: 30     # Min time between same-asset alerts
+  min_oi_notional: 1000000 # $1M minimum OI to consider
+
+# Asset filtering
+assets:
+  include_all: true        # Scan all available markets
+  # OR use whitelist:
+  # whitelist:
+  #   - BTC
+  #   - ETH
+  #   - SOL
+
+# Logging
+logging:
+  level: INFO              # DEBUG, INFO, WARNING, ERROR
+  file: logs/funding_scanner.log
+  max_size_mb: 100
+  backup_count: 5
+
+# Risk controls
+risk:
+  max_position_size_usd: 50000
+  min_margin_buffer_pct: 20
+  pause_on_volatility: true  # Pause if >10% 1h move
