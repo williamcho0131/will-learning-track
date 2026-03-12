@@ -1,241 +1,220 @@
 #!/usr/bin/env python3
 """
-Funding Arbitrage Alert Bot
-Reusable scanner for funding rate opportunities
+Multi-Asset Opportunity Scanner
+Scans ALL perpetual markets across exchanges
+Ranks by opportunity score, alerts only on HIGH priority
 """
 
 import asyncio
 import aiohttp
 import os
-import yaml
-import sys
 from datetime import datetime
 import time
-from typing import Dict, List, Optional, Tuple
 
-# Load config
-CONFIG_PATH = os.getenv('FUNDING_BOT_CONFIG', 'config.yaml')
+TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '8472788444:AAH59Lk_kEgSkhTfv6qlcfI8Ow-ffXDvnOA')
+CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', '-1003832962281')
+BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
-def load_config():
-    """Load configuration from YAML or environment"""
-    config = {
-        'telegram': {
-            'token': os.getenv('TELEGRAM_BOT_TOKEN'),
-            'chat_id': os.getenv('TELEGRAM_CHAT_ID'),
-        },
-        'exchanges': ['binance', 'hyperliquid'],
-        'thresholds': {
-            'major': 0.0008,
-            'mid': 0.0012,
-            'alt': 0.0020,
-            'exotic': 0.0030,
-        },
-        'scanning': {
-            'interval_seconds': 5,
-            'cooldown_minutes': 30,
-        },
-        'assets': {
-            'include_all': True,
-            'whitelist': [],
-        }
-    }
-    
-    if os.path.exists(CONFIG_PATH):
-        with open(CONFIG_PATH, 'r') as f:
-            file_config = yaml.safe_load(f)
-            if file_config:
-                config.update(file_config)
-    
-    return config
+# Opportunity score thresholds
+THRESHOLDS = {
+    'major': {'min_spread': 0.0008, 'liquidity_factor': 1.0},      # BTC, ETH
+    'mid': {'min_spread': 0.0012, 'liquidity_factor': 0.7},         # SOL, LINK, ARB
+    'alt': {'min_spread': 0.0020, 'liquidity_factor': 0.5},         # DOGE, HYPE
+    'exotic': {'min_spread': 0.0030, 'liquidity_factor': 0.3},      # Memes, new listings
+}
 
 # Asset classification
 ASSET_CLASS = {
     'BTC': 'major', 'ETH': 'major',
-    'SOL': 'mid', 'LINK': 'mid', 'ARB': 'mid', 'AVAX': 'mid',
-    'DOGE': 'alt', 'HYPE': 'alt', 'PEPE': 'alt', 'SHIB': 'alt',
+    'SOL': 'mid', 'LINK': 'mid', 'ARB': 'mid',
+    'DOGE': 'alt', 'HYPE': 'alt', 'PEPE': 'alt',
 }
 
-def get_asset_class(symbol: str) -> str:
+def get_asset_class(symbol):
     """Classify asset by market cap/liquidity"""
     base = symbol.replace('USDT', '').replace('USD', '').replace('-PERP', '')
-    return ASSET_CLASS.get(base, 'mid')
+    return ASSET_CLASS.get(base, 'mid')  # Default to mid if unknown
 
-def get_liquidity_factor(asset_class: str) -> float:
-    """Get liquidity multiplier for scoring"""
-    factors = {'major': 1.0, 'mid': 0.7, 'alt': 0.5, 'exotic': 0.3}
-    return factors.get(asset_class, 0.5)
+# Track state
+cooldowns = {}
+last_opportunities = {}
 
-class TelegramNotifier:
-    """Telegram notification handler"""
-    
-    def __init__(self, token: str, chat_id: str):
-        self.token = token
-        self.chat_id = chat_id
-        self.base_url = f"https://api.telegram.org/bot{token}"
-    
-    async def send_message(self, text: str) -> bool:
-        """Send Telegram message"""
-        try:
-            async with aiohttp.ClientSession() as session:
-                url = f"{self.base_url}/sendMessage"
-                payload = {
-                    "chat_id": self.chat_id,
-                    "text": text,
-                    "parse_mode": "HTML"
-                }
-                async with session.post(url, json=payload) as resp:
-                    return resp.status == 200
-        except Exception as e:
-            print(f"[ERROR] Telegram failed: {e}")
+async def send_message(text):
+    """Send Telegram message"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            url = f"{BASE_URL}/sendMessage"
+            payload = {"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}
+            async with session.post(url, json=payload) as resp:
+                return resp.status == 200
+    except Exception as e:
+        print(f"[ERROR] Send failed: {e}")
+        return False
+
+def check_cooldown(asset, alert_type, minutes=30):
+    """Check if alert is in cooldown"""
+    now = time.time()
+    key = f"{asset}_{alert_type}"
+    if key in cooldowns:
+        if now - cooldowns[key] < minutes * 60:
             return False
+    cooldowns[key] = now
+    return True
 
-class ExchangeAPI:
-    """Exchange API wrapper"""
-    
-    @staticmethod
-    async def get_binance_perps() -> Dict:
-        """Fetch ALL perpetual markets from Binance"""
-        try:
-            async with aiohttp.ClientSession() as session:
-                # Get funding rates
-                async with session.get("https://fapi.binance.com/fapi/v1/premiumIndex") as resp:
-                    funding_data = await resp.json()
+async def get_binance_perps():
+    """Fetch ALL perpetual markets from Binance"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            # Get all funding rates
+            async with session.get("https://fapi.binance.com/fapi/v1/premiumIndex") as resp:
+                data = await resp.json()
                 
-                # Get 24h ticker
-                async with session.get("https://fapi.binance.com/fapi/v1/ticker/24hr") as resp:
-                    tickers = {t['symbol']: t for t in await resp.json()}
-                
-                perps = {}
-                for item in funding_data:
-                    symbol = item['symbol']
-                    if not symbol.endswith('USDT'):
-                        continue
+            # Get 24h ticker for volume/price
+            async with session.get("https://fapi.binance.com/fapi/v1/ticker/24hr") as resp:
+                tickers = {t['symbol']: t for t in await resp.json()}
+            
+            perps = {}
+            for item in data:
+                symbol = item['symbol']
+                if not symbol.endswith('USDT'):
+                    continue
                     
-                    ticker = tickers.get(symbol, {})
-                    perps[symbol] = {
-                        'funding': float(item.get('lastFundingRate', 0)),
-                        'price': float(item['markPrice']),
-                        'volume': float(ticker.get('quoteVolume', 0)),
-                        'change_24h': float(ticker.get('priceChangePercent', 0)),
-                    }
-                return perps
-        except Exception as e:
-            print(f"[ERROR] Binance API: {e}")
-            return {}
-    
-    @staticmethod
-    async def get_hyperliquid_perps() -> Dict:
-        """Fetch ALL perpetual markets from Hyperliquid"""
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    'https://api.hyperliquid.xyz/info',
-                    json={"type": "metaAndAssetCtxs"}
-                ) as resp:
-                    data = await resp.json()
+                funding = float(item.get('lastFundingRate', 0))
+                mark_price = float(item['markPrice'])
                 
-                meta, ctxs = data[0], data[1]
-                perps = {}
+                # Get additional data from ticker
+                ticker = tickers.get(symbol, {})
+                volume = float(ticker.get('quoteVolume', 0))
+                price_change = float(ticker.get('priceChangePercent', 0))
                 
-                for i, asset in enumerate(meta['universe']):
-                    name = asset['name']
-                    ctx = ctxs[i]
-                    perps[name] = {
-                        'funding': float(ctx['funding']),
-                        'price': float(ctx['markPx']),
-                        'oi': float(ctx['openInterest']),
-                        'volume': float(ctx['dayNtlVlm']),
-                    }
-                return perps
-        except Exception as e:
-            print(f"[ERROR] Hyperliquid API: {e}")
-            return {}
+                perps[symbol] = {
+                    'funding': funding,
+                    'price': mark_price,
+                    'volume': volume,
+                    'change_24h': price_change,
+                    'exchange': 'Binance'
+                }
+            
+            return perps
+    except Exception as e:
+        print(f"[ERROR] Binance fetch: {e}")
+        return {}
 
-class OpportunityAnalyzer:
-    """Analyze and score arbitrage opportunities"""
-    
-    def __init__(self, config: Dict):
-        self.config = config
-        self.cooldowns = {}
-    
-    def check_cooldown(self, asset: str, minutes: int = 30) -> bool:
-        """Check if alert is in cooldown"""
-        now = time.time()
-        key = f"{asset}_alert"
-        if key in self.cooldowns:
-            if now - self.cooldowns[key] < minutes * 60:
-                return False
-        self.cooldowns[key] = now
-        return True
-    
-    def calculate_score(self, asset: str, binance_data: Dict, hl_data: Dict) -> Optional[Dict]:
-        """Calculate opportunity score"""
-        if not binance_data or not hl_data:
-            return None
-        
-        asset_class = get_asset_class(asset)
-        min_spread = self.config['thresholds'].get(asset_class, 0.001)
-        liquidity_factor = get_liquidity_factor(asset_class)
-        
-        # Calculate spread
-        spread = abs(binance_data['funding'] - hl_data['funding'])
-        
-        if spread < min_spread:
-            return None
-        
-        # Calculate notional OI
-        oi_notional = hl_data.get('oi', 0) * hl_data.get('price', 0)
-        
-        # Score formula
-        score = spread * liquidity_factor * (oi_notional / 1e9)
-        
-        # Determine best side
-        if binance_data['funding'] < hl_data['funding']:
-            best_long = 'Binance'
-            best_short = 'Hyperliquid'
-            long_funding = binance_data['funding']
-            short_funding = hl_data['funding']
-        else:
-            best_long = 'Hyperliquid'
-            best_short = 'Binance'
-            long_funding = hl_data['funding']
-            short_funding = binance_data['funding']
-        
-        return {
-            'asset': asset,
-            'spread': spread,
-            'score': score,
-            'asset_class': asset_class,
-            'binance_funding': binance_data['funding'],
-            'hl_funding': hl_data['funding'],
-            'binance_price': binance_data['price'],
-            'hl_price': hl_data['price'],
-            'oi_notional': oi_notional,
-            'volume': hl_data.get('volume', 0) + binance_data.get('volume', 0),
-            'best_long': best_long,
-            'best_short': best_short,
-            'long_funding': long_funding,
-            'short_funding': short_funding,
-            'threshold': min_spread,
-        }
+async def get_hyperliquid_perps():
+    """Fetch ALL perpetual markets from Hyperliquid"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post('https://api.hyperliquid.xyz/info', 
+                json={"type": "metaAndAssetCtxs"}) as resp:
+                data = await resp.json()
+            
+            meta, ctxs = data[0], data[1]
+            perps = {}
+            
+            for i, asset in enumerate(meta['universe']):
+                name = asset['name']  # e.g., "BTC"
+                ctx = ctxs[i]
+                
+                perps[name] = {
+                    'funding': float(ctx['funding']),
+                    'price': float(ctx['markPx']),
+                    'oi': float(ctx['openInterest']),
+                    'volume': float(ctx['dayNtlVlm']),
+                    'exchange': 'Hyperliquid'
+                }
+            
+            return perps
+    except Exception as e:
+        print(f"[ERROR] Hyperliquid fetch: {e}")
+        return {}
 
-class FundingArbBot:
-    """Main bot class"""
+def calculate_opportunity_score(asset, binance_data, hl_data):
+    """Calculate opportunity score for an asset"""
+    if not binance_data or not hl_data:
+        return None
     
-    def __init__(self):
-        self.config = load_config()
-        self.notifier = TelegramNotifier(
-            self.config['telegram']['token'],
-            self.config['telegram']['chat_id']
+    # Get asset class
+    asset_class = get_asset_class(asset)
+    config = THRESHOLDS[asset_class]
+    
+    # Calculate funding spread
+    binance_funding = binance_data['funding']
+    hl_funding = hl_data['funding']
+    spread = abs(binance_funding - hl_funding)
+    
+    # Minimum spread check
+    if spread < config['min_spread']:
+        return None
+    
+    # Calculate notional OI
+    oi_notional = hl_data.get('oi', 0) * hl_data.get('price', 0)
+    
+    # Opportunity score
+    score = spread * config['liquidity_factor'] * (oi_notional / 1e9)
+    
+    return {
+        'asset': asset,
+        'spread': spread,
+        'binance_funding': binance_funding,
+        'hl_funding': hl_funding,
+        'binance_price': binance_data['price'],
+        'hl_price': hl_data['price'],
+        'oi_notional': oi_notional,
+        'volume': hl_data.get('volume', 0) + binance_data.get('volume', 0),
+        'asset_class': asset_class,
+        'score': score,
+        'threshold': config['min_spread']
+    }
+
+async def scan_all_opportunities():
+    """Scan all perpetuals and return ranked opportunities"""
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Scanning all perp markets...")
+    
+    # Fetch all markets
+    binance_perps = await get_binance_perps()
+    hl_perps = await get_hyperliquid_perps()
+    
+    print(f"  Binance: {len(binance_perps)} markets")
+    print(f"  Hyperliquid: {len(hl_perps)} markets")
+    
+    # Find common assets
+    common_assets = set(binance_perps.keys()) & set(hl_perps.keys())
+    print(f"  Common: {len(common_assets)} assets")
+    
+    # Calculate scores
+    opportunities = []
+    for asset in common_assets:
+        opp = calculate_opportunity_score(
+            asset, 
+            binance_perps[asset], 
+            hl_perps[asset]
         )
-        self.analyzer = OpportunityAnalyzer(self.config)
-        self.scan_count = 0
+        if opp:
+            opportunities.append(opp)
     
-    async def send_opportunity_alert(self, opp: Dict):
-        """Send HIGH priority opportunity alert"""
-        spread_pct = opp['spread'] * 100
-        
-        message = f"""🔥 <b>HIGH PRIORITY ARB: {opp['asset']}</b>
+    # Sort by score descending
+    opportunities.sort(key=lambda x: x['score'], reverse=True)
+    
+    return opportunities, binance_perps, hl_perps
+
+async def send_opportunity_alert(opp):
+    """Send HIGH priority opportunity alert"""
+    asset = opp['asset']
+    spread_pct = opp['spread'] * 100
+    
+    # Determine best exchange to long/short
+    if opp['binance_funding'] < opp['hl_funding']:
+        best_long = 'Binance'
+        best_short = 'Hyperliquid'
+        long_funding = opp['binance_funding'] * 100
+        short_funding = opp['hl_funding'] * 100
+    else:
+        best_long = 'Hyperliquid'
+        best_short = 'Binance'
+        long_funding = opp['hl_funding'] * 100
+        short_funding = opp['binance_funding'] * 100
+    
+    message = f"""🔥 <b>HIGH PRIORITY ARB: {asset}</b>
 
 Funding Spread: {spread_pct:.4f}% (threshold: {opp['threshold']*100:.2f}%)
 
@@ -244,8 +223,8 @@ Funding Spread: {spread_pct:.4f}% (threshold: {opp['threshold']*100:.2f}%)
 • Hyperliquid: {opp['hl_funding']*100:.4f}%
 
 <b>Trade Setup:</b>
-💚 Long on {opp['best_long']}: {opp['long_funding']*100:.4f}%
-❤️ Short on {opp['best_short']}: {opp['short_funding']*100:.4f}%
+💚 Long on {best_long}: {long_funding:.4f}%
+❤️ Short on {best_short}: {short_funding:.4f}%
 
 <b>Market Data:</b>
 • OI: ${opp['oi_notional']/1e6:.1f}M
@@ -255,112 +234,78 @@ Funding Spread: {spread_pct:.4f}% (threshold: {opp['threshold']*100:.2f}%)
 ⏰ Next funding: ~8 hours
 <i>{datetime.now().strftime('%H:%M:%S')} UTC</i>
 """
-        await self.notifier.send_message(message)
-        print(f"  🔥 ALERT SENT: {opp['asset']} (score: {opp['score']:.3f})")
     
-    async def send_summary(self, opportunities: List[Dict]):
-        """Send summary of top opportunities"""
-        if not opportunities:
-            return
-        
-        lines = [f"📊 <b>Top {min(3, len(opportunities))} Opportunities</b>\n"]
-        
-        for i, opp in enumerate(opportunities[:3], 1):
-            spread_pct = opp['spread'] * 100
-            lines.append(f"{i}. {opp['asset']}: {spread_pct:.4f}% spread (score: {opp['score']:.2f})")
-        
-        message = "\n".join(lines)
-        await self.notifier.send_message(message)
-    
-    async def scan(self):
-        """Run one scan cycle"""
-        self.scan_count += 1
-        print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Scan #{self.scan_count}")
-        
-        # Fetch data
-        binance_perps = await ExchangeAPI.get_binance_perps()
-        hl_perps = await ExchangeAPI.get_hyperliquid_perps()
-        
-        print(f"  Binance: {len(binance_perps)} markets")
-        print(f"  Hyperliquid: {len(hl_perps)} markets")
-        
-        # Find common assets
-        common = set(binance_perps.keys()) & set(hl_perps.keys())
-        print(f"  Common: {len(common)} assets")
-        
-        # Analyze opportunities
-        opportunities = []
-        for asset in common:
-            opp = self.analyzer.calculate_score(
-                asset,
-                binance_perps[asset],
-                hl_perps[asset]
-            )
-            if opp:
-                opportunities.append(opp)
-        
-        # Sort by score
-        opportunities.sort(key=lambda x: x['score'], reverse=True)
-        
-        if opportunities:
-            print(f"  Found {len(opportunities)} opportunities")
-            
-            # Send HIGH priority alerts
-            high_priority = [o for o in opportunities if o['score'] > 0.05]
-            for opp in high_priority:
-                if self.analyzer.check_cooldown(opp['asset'], 30):
-                    await self.send_opportunity_alert(opp)
-            
-            # Send summary every 10 scans
-            if self.scan_count % 10 == 0:
-                await self.send_summary(opportunities)
-        else:
-            print(f"  No opportunities above threshold")
-            # Show top spreads for monitoring
-            all_spreads = []
-            for asset in list(common)[:20]:
-                spread = abs(binance_perps[asset]['funding'] - hl_perps[asset]['funding'])
-                all_spreads.append((asset, spread * 100))
-            all_spreads.sort(key=lambda x: x[1], reverse=True)
-            if all_spreads:
-                print(f"  Top spreads: {all_spreads[:3]}")
-    
-    async def run(self):
-        """Main loop"""
-        print("="*60)
-        print("🚀 Funding Arbitrage Alert Bot")
-        print("="*60)
-        print(f"Scanning: ALL perpetual markets")
-        print(f"Exchanges: {', '.join(self.config['exchanges'])}")
-        print(f"Alert threshold: Score > 0.05")
-        print(f"Scan interval: {self.config['scanning']['interval_seconds']}s")
-        print("="*60)
-        
-        # Send startup message
-        await self.notifier.send_message(
-            f"🟢 <b>Funding Arb Bot Started</b>\n\n"
-            f"Scanning: {len(self.config['exchanges'])} exchanges\n"
-            f"Markets: ALL perpetuals\n"
-            f"Ranking: By opportunity score\n\n"
-            f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} UTC"
-        )
-        
-        while True:
-            try:
-                await self.scan()
-            except Exception as e:
-                print(f"[ERROR] Scan failed: {e}")
-            
-            await asyncio.sleep(self.config['scanning']['interval_seconds'])
+    await send_message(message)
+    print(f"  🔥 ALERT SENT: {asset} (score: {opp['score']:.3f})")
 
-async def main():
-    """Entry point"""
-    bot = FundingArbBot()
-    await bot.run()
+async def send_top_opportunities_summary(opportunities, top_n=3):
+    """Send summary of top opportunities"""
+    if not opportunities:
+        return
+    
+    lines = [f"📊 <b>Top {min(top_n, len(opportunities))} Opportunities</b>\n"]
+    
+    for i, opp in enumerate(opportunities[:top_n], 1):
+        spread_pct = opp['spread'] * 100
+        lines.append(f"{i}. {opp['asset']}: {spread_pct:.4f}% spread (score: {opp['score']:.2f})")
+    
+    message = "\n".join(lines)
+    await send_message(message)
+
+async def run_scanner():
+    """Main scanner loop"""
+    print(f"[{datetime.now()}] Multi-Asset Opportunity Scanner Started")
+    print(f"Scanning: ALL perpetual markets")
+    print(f"Exchanges: Binance + Hyperliquid")
+    print(f"Alert threshold: Score-based\n")
+    
+    # Send startup message
+    await send_message(
+        "🟢 <b>Multi-Asset Scanner Started</b>\n\n"
+        "Scanning: ALL perpetual markets\n"
+        "Ranking: By opportunity score\n"
+        "Alerting: Only HIGH priority (score > 0.05)\n\n"
+        f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} UTC"
+    )
+    
+    scan_count = 0
+    while True:
+        try:
+            scan_count += 1
+            print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Scan #{scan_count}")
+            
+            # Scan all opportunities
+            opportunities, binance_perps, hl_perps = await scan_all_opportunities()
+            
+            if not opportunities:
+                print(f"  No opportunities above threshold")
+                # Print top 3 anyway for monitoring
+                all_scores = []
+                for asset in set(binance_perps.keys()) & set(hl_perps.keys()):
+                    opp = calculate_opportunity_score(asset, binance_perps[asset], hl_perps[asset])
+                    if opp:
+                        all_scores.append((asset, opp['spread']*100))
+                all_scores.sort(key=lambda x: x[1], reverse=True)
+                if all_scores:
+                    print(f"  Top spreads: {all_scores[:3]}")
+            else:
+                print(f"  Found {len(opportunities)} opportunities")
+                
+                # Send alerts for HIGH priority (score > 0.05)
+                high_priority = [o for o in opportunities if o['score'] > 0.05]
+                
+                for opp in high_priority:
+                    if check_cooldown(opp['asset'], 'high_priority', 60):
+                        await send_opportunity_alert(opp)
+                
+                # Send summary of top 3 every 10 scans
+                if scan_count % 10 == 0:
+                    await send_top_opportunities_summary(opportunities)
+            
+        except Exception as e:
+            print(f"[ERROR] Scan failed: {e}")
+        
+        await asyncio.sleep(5)  # 5 second intervals
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\n\n👋 Bot stopped by user")
-        sys.exit(0)
+    asyncio.run(run_scanner())
