@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market Maker Simulator - Learn by Doing</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0e27;
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            border-radius: 15px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.8;
+            font-size: 1.1em;
+        }
+        
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        
+        .panel {
+            background: #151b3d;
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid #2a3f6b;
+        }
+        
+        .panel h2 {
+            color: #4fc3f7;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .panel h2::before {
+            content: "▶";
+            font-size: 0.8em;
+        }
+        
+        /* Order Book Panel */
+        .orderbook {
+            grid-row: span 2;
+        }
+        
+        .orderbook-display {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        
+        .book-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 8px;
+            margin: 2px 0;
+            border-radius: 4px;
+        }
+        
+        .bid-row {
+            background: rgba(0, 255, 136, 0.1);
+        }
+        
+        .ask-row {
+            background: rgba(255, 71, 87, 0.1);
+        }
+        
+        .bid-price {
+            color: #00ff88;
+            font-weight: bold;
+        }
+        
+        .ask-price {
+            color: #ff4757;
+            font-weight: bold;
+        }
+        
+        .size-bar {
+            height: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            flex: 1;
+            margin: 0 10px;
+        }
+        
+        .size-fill {
+            height: 100%;
+            transition: width 0.3s;
+        }
+        
+        .bid-fill {
+            background: linear-gradient(90deg, #00ff88, #00cc6a);
+        }
+        
+        .ask-fill {
+            background: linear-gradient(90deg, #ff4757, #cc3645);
+        }
+        
+        /* Spread Indicator */
+        .spread-display {
+            text-align: center;
+            padding: 15px;
+            background: #0f1535;
+            border-radius: 10px;
+            margin: 15px 0;
+        }
+        
+        .spread-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #ffd700;
+        }
+        
+        .spread-label {
+            opacity: 0.7;
+            font-size: 0.9em;
+        }
+        
+        /* MM Quote Panel */
+        .quote-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .quote-input {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .quote-input label {
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+        
+        .quote-input input {
+            padding: 10px;
+            border: 1px solid #2a3f6b;
+            background: #0f1535;
+            color: #fff;
+            border-radius: 8px;
+            font-size: 1.1em;
+        }
+        
+        .quote-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .quote-btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+        
+        .bid-btn {
+            background: linear-gradient(135deg, #00ff88, #00cc6a);
+            color: #000;
+        }
+        
+        .ask-btn {
+            background: linear-gradient(135deg, #ff4757, #cc3645);
+            color: #fff;
+        }
+        
+        .quote-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .auto-quote {
+            background: #2a3f6b;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 10px;
+        }
+        
+        .auto-quote label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+        }
+        
+        /* PnL Panel */
+        .pnl-display {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .metric-card {
+            background: #0f1535;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .metric-value {
+            font-size: 1.8em;
+            font-weight: bold;
+            margin: 5px 0;
+        }
+        
+        .metric-value.positive {
+            color: #00ff88;
+        }
+        
+        .metric-value.negative {
+            color: #ff4757;
+        }
+        
+        .metric-label {
+            font-size: 0.85em;
+            opacity: 0.7;
+        }
+        
+        /* Inventory Panel */
+        .inventory-bar {
+            background: #0f1535;
+            height: 40px;
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+            margin: 15px 0;
+        }
+        
+        .inventory-fill {
+            height: 100%;
+            transition: all 0.5s;
+            position: relative;
+        }
+        
+        .inventory-long {
+            background: linear-gradient(90deg, #00ff88, #00cc6a);
+            position: absolute;
+            left: 50%;
+        }
+        
+        .inventory-short {
+            background: linear-gradient(90deg, #ff4757, #cc3645);
+            position: absolute;
+            right: 50%;
+        }
+        
+        .inventory-center {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            font-weight: bold;
+            z-index: 10;
+        }
+        
+        .inventory-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85em;
+            opacity: 0.7;
+        }
+        
+        /* Market Regime */
+        .regime-selector {
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        
+        .regime-btn {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #2a3f6b;
+            background: #0f1535;
+            color: #fff;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9em;
+        }
+        
+        .regime-btn:hover {
+            border-color: #4fc3f7;
+        }
+        
+        .regime-btn.active {
+            background: #4fc3f7;
+            color: #000;
+            border-color: #4fc3f7;
+        }
+        
+        .regime-info {
+            background: #0f1535;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 10px;
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+        
+        /* Trade History */
+        .trade-list {
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+        
+        .trade-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px;
+            margin: 3px 0;
+            border-radius: 5px;
+            background: #0f1535;
+        }
+        
+        .trade-buy {
+            border-left: 3px solid #00ff88;
+        }
+        
+        .trade-sell {
+            border-left: 3px solid #ff4757;
+        }
+        
+        /* Chart Canvas */
+        .chart-container {
+            height: 200px;
+            background: #0f1535;
+            border-radius: 10px;
+            margin-top: 15px;
+            position: relative;
+        }
+        
+        canvas {
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Tutorial Overlay */
+        .tutorial {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .tutorial-content {
+            background: #151b3d;
+            padding: 40px;
+            border-radius: 20px;
+            max-width: 700px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .tutorial h2 {
+            color: #4fc3f7;
+            margin-bottom: 20px;
+        }
+        
+        .tutorial p {
+            line-height: 1.8;
+            margin-bottom: 15px;
+        }
+        
+        .tutorial-btn {
+            background: #4fc3f7;
+            color: #000;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .dashboard {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+        
+        @media (max-width: 800px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Tutorial Overlay -->
+    <div class="tutorial" id="tutorial">
+        <div class="tutorial-content">
+            <h2>🎓 Welcome, Future Market Maker!</h2>
+            <p><strong>Your Mission:</strong> Make markets, capture spread, manage risk.</p>
+            <p><strong>What is Market Making?</strong> You simultaneously offer to buy (bid) and sell (ask) an asset. You profit from the spread between your bid and ask prices.</p>
+            <p><strong>Key Concepts:</strong></p>
+            <ul style="margin-left: 20px; line-height: 2;">
+                <li><strong>Spread:</strong> Difference between your ask and bid (your profit margin)</li>
+                <li><strong>Inventory:</strong> Your net position (long = inventory, short = negative inventory)</li>
+                <li><strong>Adverse Selection:</strong> When informed traders pick off your quotes</li>
+                <li><strong>Market Regimes:</strong> Calm (tight spreads), Volatile (wide spreads), Trending (one-sided flow)</li>
+            </ul>
+            <p><strong>Your Goal:</strong> Keep inventory near zero, capture spread, avoid being run over by informed traders.</p>
+            <button class="tutorial-btn" onclick="startSimulation()">Start Simulation →</button>
+        </div>
+    </div>
+
+    <div class="header">
+        <h1>📊 Market Maker Simulator</h1>
+        <p>Learn market making by doing. Quote, trade, manage inventory, survive different regimes.</p>
+    </div>
+
+    <div class="dashboard">
+        <!-- Order Book Panel -->
+        <div class="panel orderbook">
+            <h2>Order Book (Market)</h2>
+            <div class="spread-display">
+                <div class="spread-value" id="marketSpread">0.08%</div>
+                <div class="spread-label">Market Spread</div>
+            </div>
+            <div class="orderbook-display" id="orderbook">
+                <!-- Asks (sells) -->
+                <div id="asks"></div>
+                
+                <!-- Spread -->
+                <div style="text-align: center; padding: 10px; background: #0f1535; margin: 5px 0; font-weight: bold;">
+                    <span style="color: #ffd700;">MID: <span id="midPrice">100.00</span></span>
+                </div>
+                
+                <!-- Bids (buys) -->
+                <div id="bids"></div>
+            </div>
+        </div>
+
+        <!-- MM Quote Panel -->
+        <div class="panel">
+            <h2>Your Quotes (Market Maker)</h2>
+            <div class="quote-controls">
+                <div class="quote-input">
+                    <label>Bid Price (Buy)</label>
+                    <input type="number" id="mmBidPrice" value="99.96" step="0.01">
+                </div>
+                <div class="quote-input">
+                    <label>Bid Size</label>
+                    <input type="number" id="mmBidSize" value="100" step="10">
+                </div>
+                <div class="quote-input">
+                    <label>Ask Price (Sell)</label>
+                    <input type="number" id="mmAskPrice" value="100.04" step="0.01">
+                </div>
+                <div class="quote-input">
+                    <label>Ask Size</label>
+                    <input type="number" id="mmAskSize" value="100" step="10">
+                </div>
+                
+                <div class="quote-row">
+                    <button class="quote-btn bid-btn" onclick="updateQuote('bid')">Update Bid</button>
+                    <button class="quote-btn ask-btn" onclick="updateQuote('ask')">Update Ask</button>
+                </div>
+                
+                <div class="auto-quote">
+                    <label>
+                        <input type="checkbox" id="autoQuote" onchange="toggleAutoQuote()">
+                        Auto-Quote (AI Market Maker Mode)
+                    </label>
+                </div>
+            </div>
+            
+            <div style="margin-top: 20px; padding: 15px; background: #0f1535; border-radius: 10px;">
+                <strong>Your Spread:</strong> <span id="yourSpread" style="color: #ffd700; font-size: 1.3em;">0.08%</span>
+                <br><small>Target: 0.05% - 0.20% depending on regime</small>
+            </div>
+        </div>
+
+        <!-- Market Regime Panel -->
+        <div class="panel">
+            <h2>Market Regime</h2>
+            <div class="regime-selector">
+                <button class="regime-btn active" onclick="setRegime('calm')" id="regime-calm">Calm</button>
+                <button class="regime-btn" onclick="setRegime('volatile')" id="regime-volatile">Volatile</button>
+                <button class="regime-btn" onclick="setRegime('trending')" id="regime-trending">Trending</button>
+            </div>
+            <div class="regime-info" id="regimeInfo">
+                <strong>🟢 Calm Market</strong><br>
+                • Low volatility<br>
+                • Balanced flow<br>
+                • Tight spreads possible<br>
+                • <em>Strategy:</em> Quote tight, capture small spreads consistently
+            </div>
+        </div>
+
+        <!-- PnL Panel -->
+        <div class="panel">
+            <h2>Profit & Loss</h2>
+            <div class="pnl-display">
+                <div class="metric-card">
+                    <div class="metric-label">Realized PnL</div>
+                    <div class="metric-value positive" id="realizedPnL">$0</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Unrealized PnL</div>
+                    <div class="metric-value" id="unrealizedPnL">$0</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Spread Captured</div>
+                    <div class="metric-value" id="spreadCaptured">$0</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Adverse Selection</div>
+                    <div class="metric-value negative" id="adverseSelection">$0</div>
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="pnlChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Inventory Panel -->
+        <div class="panel">
+            <h2>Inventory Management</h2>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                <span>Position: <strong id="position">0</strong> units</span>
+                <span>Notional: <strong id="notional">$0</strong></span>
+            </div>
+            <div class="inventory-bar">
+                <div class="inventory-fill inventory-long" id="longFill" style="width: 0%"></div>
+                <div class="inventory-fill inventory-short" id="shortFill" style="width: 0%"></div>
+                <div class="inventory-center">NEUTRAL</div>
+            </div>
+            <div class="inventory-labels">
+                <span>Short (-500)</span>
+                <span>Neutral (0)</span>
+                <span>Long (+500)</span>
+            </div>
+            
+            <div style="margin-top: 20px; padding: 15px; background: #0f1535; border-radius: 10px; font-size: 0.9em;">
+                <strong>💡 Inventory Risk:</strong><br>
+                <span id="inventoryRisk">Low - Position near zero</span>
+            </div>
+            
+            <button class="quote-btn" style="width: 100%; margin-top: 15px; background: #4fc3f7; color: #000;" onclick="hedgeInventory()">
+                🔄 Hedge Inventory (Market Order)
+            </button>
+        </div>
+
+        <!-- Trade History -->
+        <div class="panel">
+            <h2>Trade History</h2>
+            <div class="trade-list" id="tradeHistory">
+                <div style="opacity: 0.5; text-align: center; padding: 20px;">No trades yet...</div>
+            </div>
+        </div>
+
+        <!-- Educational Panel -->
+        <div class="panel" style="grid-column: span 2;">
+            <h2>📚 Market Maker Lessons</h2>
+            <div id="lessonContent" style="line-height: 1.8;">
+                <p><strong>Current Lesson:</strong> Start by placing your bid and ask quotes around the mid price.</p>
+                <p>• If someone hits your bid (sells to you), you go LONG</p>
+                <p>• If someone lifts your ask (buys from you), you go SHORT</p>
+                <p>• Your profit is the spread between where you buy and sell</p>
+                <p>• <span style="color: #ff4757;">WARNING:</span> If price moves against your inventory, you lose!</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Game State
+        const state = {
+            midPrice: 100.00,
+            inventory: 0,
+            realizedPnL: 0,
+            unrealizedPnL: 0,
+            spreadCaptured: 0,
+            adverseSelection: 0,
+            mmBid: 99.96,
+            mmAsk: 100.04,
+            mmBidSize: 100,
+            mmAskSize: 100,
+            regime: 'calm',
+            trades: [],
+            pnlHistory: [],
+            autoQuote: false,
+            tick: 0
+        };
+
+        const regimeConfigs = {
+            calm: {
+                volatility: 0.02,
+                flowBalance: 0.5,
+                spreadMin: 0.04,
+                spreadMax: 0.12,
+                adverseSelection: 0.1,
+                name: 'Calm',
+                description: 'Low volatility, balanced flow, tight spreads possible'
+            },
+            volatile: {
+                volatility: 0.08,
+                flowBalance: 0.5,
+                spreadMin: 0.15,
+                spreadMax: 0.40,
+                adverseSelection: 0.4,
+                name: 'Volatile',
+                description: 'High volatility, wide spreads needed, inventory risk high'
+            },
+            trending: {
+                volatility: 0.05,
+                flowBalance: 0.8,
+                spreadMin: 0.10,
+                spreadMax: 0.25,
+                adverseSelection: 0.6,
+                name: 'Trending',
+                description: 'One-sided flow, adverse selection risk, skew quotes!'
+            }
+        };
+
+        function startSimulation() {
+            document.getElementById('tutorial').classList.add('hidden');
+            initOrderBook();
+            setInterval(simulateMarket, 1000);
+            updateDisplay();
+        }
+
+        function initOrderBook() {
+            updateOrderBook();
+        }
+
+        function updateOrderBook() {
+            const config = regimeConfigs[state.regime];
+            const marketSpread = config.spreadMin + Math.random() * (config.spreadMax - config.spreadMin);
+            
+            // Generate order book around mid
+            const asks = [];
+            const bids = [];
+            
+            for (let i = 0; i < 5; i++) {
+                const askPrice = state.midPrice + (marketSpread/2) + (i * 0.02);
+                const bidPrice = state.midPrice - (marketSpread/2) - (i * 0.02);
+                const askSize = Math.floor(Math.random() * 500) + 100;
+                const bidSize = Math.floor(Math.random() * 500) + 100;
+                
+                asks.push({ price: askPrice, size: askSize });
+                bids.push({ price: bidPrice, size: bidSize });
+            }
+            
+            // Render asks (reversed - best ask at bottom)
+            const asksHtml = asks.slice().reverse().map((level, i) => {
+                const width = (level.size / 600) * 100;
+                const isMMAsk = Math.abs(level.price - state.mmAsk) < 0.001;
+                return `<div class="book-row ask-row ${isMMAsk ? 'mm-quote' : ''}" style="${isMMAsk ? 'background: rgba(255, 71, 87, 0.3);' : ''}">
+                    <span class="ask-price">${level.price.toFixed(2)}</span>
+                    <div class="size-bar"><div class="size-fill ask-fill" style="width: ${width}%"></div></div>
+                    <span>${level.size}</span>
+                    ${isMMAsk ? '<span style="color: #ffd700;">★ YOU</span>' : ''}
+                </div>`;
+            }).join('');
+            
+            // Render bids
+            const bidsHtml = bids.map((level, i) => {
+                const width = (level.size / 600) * 100;
+                const isMMBid = Math.abs(level.price - state.mmBid) < 0.001;
+                return `<div class="book-row bid-row ${isMMBid ? 'mm-quote' : ''}" style="${isMMBid ? 'background: rgba(0, 255, 136, 0.3);' : ''}">
+                    <span class="bid-price">${level.price.toFixed(2)}</span>
+                    <div class="size-bar"><div class="size-fill bid-fill" style="width: ${width}%"></div></div>
+                    <span>${level.size}</span>
+                    ${isMMBid ? '<span style="color: #ffd700;">★ YOU</span>' : ''}
+                </div>`;
+            }).join('');
+            
+            document.getElementById('asks').innerHTML = asksHtml;
+            document.getElementById('bids').innerHTML = bidsHtml;
+            document.getElementById('midPrice').textContent = state.midPrice.toFixed(2);
+            document.getElementById('marketSpread').textContent = marketSpread.toFixed(2) + '%';
+        }
+
+        function updateQuote(side) {
+            if (side === 'bid') {
+                state.mmBid = parseFloat(document.getElementById('mmBidPrice').value);
+                state.mmBidSize = parseInt(document.getElementById('mmBidSize').value);
+            } else {
+                state.mmAsk = parseFloat(document.getElementById('mmAskPrice').value);
+                state.mmAskSize = parseInt(document.getElementById('mmAskSize').value);
+            }
+            
+            const yourSpread = ((state.mmAsk - state.mmBid) / state.midPrice * 100).toFixed(2);
+            document.getElementById('yourSpread').textContent = yourSpread + '%';
+            
+            updateOrderBook();
+            addLesson(`Updated ${side.toUpperCase()} quote. Your spread is now ${yourSpread}%.`);
+        }
+
+        function toggleAutoQuote() {
+            state.autoQuote = document.getElementById('autoQuote').checked;
+            if (state.autoQuote) {
+                addLesson('🤖 Auto-Quote Mode: AI adjusts quotes based on inventory and regime.');
+            }
+        }
+
+        function setRegime(regime) {
+            state.regime = regime;
+            
+            // Update UI
+            document.querySelectorAll('.regime-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`regime-${regime}`).classList.add('active');
+            
+            // Update info
+            const config = regimeConfigs[regime];
+            let icon = regime === 'calm' ? '🟢' : regime === 'volatile' ? '🔴' : '🟠';
+            document.getElementById('regimeInfo').innerHTML = `
+                <strong>${icon} ${config.name} Market</strong><br>
+                • Volatility: ${(config.volatility * 100).toFixed(1)}%<br>
+                • Flow Balance: ${(config.flowBalance * 100).toFixed(0)}%<br>
+                • Spread Range: ${(config.spreadMin * 100).toFixed(2)}% - ${(config.spreadMax * 100).toFixed(2)}%<br>
+                • <em>Strategy:</em> ${config.description}
+            `;
+            
+            addLesson(`Market regime changed to ${config.name.toUpperCase()}. ${config.description}`);
+            
+            // Auto-adjust quotes if enabled
+            if (state.autoQuote) {
+                autoAdjustQuotes();
+            }
+        }
+
+        function autoAdjustQuotes() {
+            const config = regimeConfigs[state.regime];
+            const spread = config.spreadMin + (config.spreadMax - config.spreadMin) / 2;
+            
+            // Inventory skew
+            let skew = 0;
+            if (state.inventory > 100) skew = -0.02; // Lower bid to buy less
+            if (state.inventory < -100) skew = 0.02; // Raise ask to sell less
+            
+            state.mmBid = state.midPrice * (1 - spread/200) + skew;
+            state.mmAsk = state.midPrice * (1 + spread/200) + skew;
+            
+            document.getElementById('mmBidPrice').value = state.mmBid.toFixed(2);
+            document.getElementById('mmAskPrice').value = state.mmAsk.toFixed(2);
+            
+            updateQuote('bid');
+            updateQuote('ask');
+        }
+
+        function simulateMarket() {
+            state.tick++;
+            const config = regimeConfigs[state.regime];
+            
+            // Price movement
+            const priceChange = (Math.random() - 0.5) * config.volatility;
+            state.midPrice *= (1 + priceChange);
+            
+            // Market orders hitting quotes
+            if (Math.random() < 0.3) {
+                // Someone sells to us (hits our bid)
+                if (Math.random() < 0.5 && state.mmBid > state.midPrice * 0.99) {
+                    executeTrade('buy', state.mmBid, Math.min(state.mmBidSize, 50));
+                }
+                // Someone buys from us (lifts our ask)
+                else if (state.mmAsk < state.midPrice * 1.01) {
+                    executeTrade('sell', state.mmAsk, Math.min(state.mmAskSize, 50));
+                }
+            }
+            
+            // Adverse selection in trending markets
+            if (state.regime === 'trending' && Math.random() < config.adverseSelection) {
+                // Informed traders know direction
+                const direction = Math.random() > 0.5 ? 1 : -1;
+                state.midPrice *= (1 + direction * 0.01);
+                
+                if (direction > 0 && state.inventory > 0) {
+                    // Price up, we're long = losing
+                    state.adverseSelection -= (state.inventory * 0.01);
+                } else if (direction < 0 && state.inventory < 0) {
+                    // Price down, we're short = losing
+                    state.adverseSelection += (state.inventory * 0.01);
+                }
+            }
+            
+            // Calculate unrealized PnL
+            state.unrealizedPnL = -(state.inventory * (state.midPrice - 100));
+            
+            // Update PnL history for chart
+            if (state.tick % 5 === 0) {
+                state.pnlHistory.push(state.realizedPnL + state.unrealizedPnL);
+                if (state.pnlHistory.length > 50) state.pnlHistory.shift();
+                drawPnLChart();
+            }
+            
+            // Auto-quote adjustment
+            if (state.autoQuote && state.tick % 10 === 0) {
+                autoAdjustQuotes();
+            }
+            
+            updateDisplay();
+            updateOrderBook();
+        }
+
+        function executeTrade(side, price, size) {
+            const notional = size * price;
+            
+            if (side === 'buy') {
+                state.inventory += size;
+                addTrade('BUY', price, size, notional);
+            } else {
+                state.inventory -= size;
+                addTrade('SELL', price, size, notional);
+            }
+            
+            // Calculate spread captured if closing position
+            if (state.trades.length >= 2) {
+                const lastBuy = state.trades.filter(t => t.side === 'BUY').pop();
+                const lastSell = state.trades.filter(t => t.side === 'SELL').pop();
+                
+                if (lastBuy && lastSell) {
+                    const spread = Math.abs(lastSell.price - lastBuy.price);
+                    state.spreadCaptured += spread * size;
+                    state.realizedPnL += spread * size;
+                }
+            }
+            
+            // Check inventory risk
+            checkInventoryRisk();
+        }
+
+        function checkInventoryRisk() {
+            const absInv = Math.abs(state.inventory);
+            let risk = 'Low';
+            let color = '#00ff88';
+            
+            if (absInv > 300) {
+                risk = 'HIGH - Consider hedging!';
+                color = '#ff4757';
+            } else if (absInv > 150) {
+                risk = 'Medium - Monitor closely';
+                color = '#ffd700';
+            }
+            
+            document.getElementById('inventoryRisk').innerHTML = `
+                <span style="color: ${color}">${risk}</span> - Position: ${state.inventory} units
+            `;
+        }
+
+        function addTrade(side, price, size, notional) {
+            const trade = {
+                time: new Date().toLocaleTimeString(),
+                side,
+                price: price.toFixed(2),
+                size,
+                notional: notional.toFixed(0)
+            };
+            
+            state.trades.unshift(trade);
+            if (state.trades.length > 20) state.trades.pop();
+            
+            const html = state.trades.map(t => `
+                <div class="trade-item trade-${t.side.toLowerCase()}">
+                    <span>${t.time}</span>
+                    <span style="font-weight: bold; color: ${t.side === 'BUY' ? '#00ff88' : '#ff4757'}">${t.side}</span>
+                    <span>${t.size} @ $${t.price}</span>
+                    <span>$${t.notional}</span>
+                </div>
+            `).join('');
+            
+            document.getElementById('tradeHistory').innerHTML = html;
+        }
+
+        function hedgeInventory() {
+            if (state.inventory === 0) {
+                addLesson('No inventory to hedge!');
+                return;
+            }
+            
+            // Market order to flatten
+            const hedgePrice = state.inventory > 0 ? state.midPrice * 0.998 : state.midPrice * 1.002;
+            const hedgeSide = state.inventory > 0 ? 'SELL' : 'BUY';
+            const hedgeSize = Math.abs(state.inventory);
+            
+            addTrade(hedgeSide, hedgePrice, hedgeSize, hedgeSize * hedgePrice);
+            
+            const slippageCost = Math.abs(state.inventory) * state.midPrice * 0.002;
+            state.realizedPnL -= slippageCost;
+            state.adverseSelection -= slippageCost;
+            
+            state.inventory = 0;
+            
+            addLesson(`🔒 HEDGED: Paid $${slippageCost.toFixed(2)} in slippage to flatten position.`);
+            updateDisplay();
+        }
+
+        function addLesson(text) {
+            document.getElementById('lessonContent').innerHTML = `
+                <p><strong>💡 Update:</strong> ${text}</p>
+                <p style="opacity: 0.7; font-size: 0.9em;">Realized PnL: $${state.realizedPnL.toFixed(2)} | Inventory: ${state.inventory}</p>
+            `;
+        }
+
+        function updateDisplay() {
+            // PnL
+            document.getElementById('realizedPnL').textContent = '$' + state.realizedPnL.toFixed(0);
+            document.getElementById('realizedPnL').className = 'metric-value ' + (state.realizedPnL >= 0 ? 'positive' : 'negative');
+            
+            document.getElementById('unrealizedPnL').textContent = '$' + state.unrealizedPnL.toFixed(0);
+            document.getElementById('unrealizedPnL').className = 'metric-value ' + (state.unrealizedPnL >= 0 ? 'positive' : 'negative');
+            
+            document.getElementById('spreadCaptured').textContent = '$' + state.spreadCaptured.toFixed(0);
+            document.getElementById('adverseSelection').textContent = '$' + state.adverseSelection.toFixed(0);
+            
+            // Inventory
+            document.getElementById('position').textContent = state.inventory;
+            document.getElementById('notional').textContent = '$' + Math.abs(state.inventory * state.midPrice).toFixed(0);
+            
+            const maxInv = 500;
+            const longWidth = Math.max(0, (state.inventory / maxInv) * 50);
+            const shortWidth = Math.max(0, (-state.inventory / maxInv) * 50);
+            
+            document.getElementById('longFill').style.width = longWidth + '%';
+            document.getElementById('shortFill').style.width = shortWidth + '%';
+        }
+
+        function drawPnLChart() {
+            const canvas = document.getElementById('pnlChart');
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (state.pnlHistory.length < 2) return;
+            
+            const min = Math.min(...state.pnlHistory);
+            const max = Math.max(...state.pnlHistory);
+            const range = max - min || 1;
+            
+            ctx.beginPath();
+            ctx.strokeStyle = '#4fc3f7';
+            ctx.lineWidth = 2;
+            
+            state.pnlHistory.forEach((pnl, i) => {
+                const x = (i / (state.pnlHistory.length - 1)) * canvas.width;
+                const y = canvas.height - ((pnl - min) / range) * canvas.height * 0.8 - canvas.height * 0.1;
+                
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            
+            ctx.stroke();
+            
+            // Draw zero line
+            ctx.beginPath();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 5]);
+            const zeroY = canvas.height - ((0 - min) / range) * canvas.height * 0.8 - canvas.height * 0.1;
+            ctx.moveTo(0, zeroY);
+            ctx.lineTo(canvas.width, zeroY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // Initialize
+        window.addEventListener('resize', drawPnLChart);
+    </script>
+</body>
+</html>
