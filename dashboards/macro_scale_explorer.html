@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Macro Scale Explorer - Understanding Global Size</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #e2e8f0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 30px;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+        
+        .dashboard {
+            max-width: 1600px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+        }
+        
+        .panel {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 25px;
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .panel h2 {
+            color: #60a5fa;
+            margin-bottom: 20px;
+            font-size: 1.4em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .panel h2::before {
+            content: "◆";
+            color: #3b82f6;
+        }
+        
+        .full-width {
+            grid-column: span 2;
+        }
+        
+        /* Comparison Tool */
+        .comparison-tool {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 20px;
+            align-items: center;
+            margin: 20px 0;
+        }
+        
+        .compare-item {
+            background: rgba(15, 23, 42, 0.6);
+            padding: 20px;
+            border-radius: 15px;
+            border: 2px solid rgba(59, 130, 246, 0.3);
+        }
+        
+        .compare-item select, .compare-item input {
+            width: 100%;
+            padding: 12px;
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            color: #e2e8f0;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-size: 1em;
+        }
+        
+        .vs-badge {
+            background: linear-gradient(135deg, #f59e0b, #ef4444);
+            color: white;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2em;
+            box-shadow: 0 5px 15px rgba(245, 158, 11, 0.4);
+        }
+        
+        .comparison-result {
+            text-align: center;
+            padding: 20px;
+            background: rgba(15, 23, 42, 0.6);
+            border-radius: 15px;
+            margin-top: 15px;
+        }
+        
+        .big-number {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #60a5fa;
+            margin: 10px 0;
+        }
+        
+        .scale-bar {
+            height: 40px;
+            background: rgba(30, 41, 59, 0.8);
+            border-radius: 20px;
+            overflow: hidden;
+            position: relative;
+            margin: 15px 0;
+        }
+        
+        .scale-fill {
+            height: 100%;
+            border-radius: 20px;
+            transition: width 0.8s ease;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 15px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        
+        .scale-left {
+            background: linear-gradient(90deg, #3b82f6, #60a5fa);
+        }
+        
+        .scale-right {
+            background: linear-gradient(90deg, #ef4444, #f87171);
+        }
+        
+        /* Data Grid */
+        .data-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .data-card {
+            background: rgba(15, 23, 42, 0.6);
+            padding: 20px;
+            border-radius: 12px;
+            border-left: 4px solid #3b82f6;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .data-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            border-left-color: #60a5fa;
+        }
+        
+        .data-card h3 {
+            font-size: 0.9em;
+            opacity: 0.7;
+            margin-bottom: 8px;
+        }
+        
+        .data-card .value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #60a5fa;
+        }
+        
+        .data-card .subtext {
+            font-size: 0.8em;
+            opacity: 0.6;
+            margin-top: 5px;
+        }
+        
+        /* Category Pills */
+        .category-pills {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+        
+        .pill {
+            padding: 8px 16px;
+            background: rgba(59, 130, 246, 0.2);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9em;
+        }
+        
+        .pill:hover, .pill.active {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        /* Visualization Container */
+        .chart-container {
+            position: relative;
+            height: 350px;
+            margin-top: 20px;
+        }
+        
+        /* Insight Box */
+        .insight-box {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(239, 68, 68, 0.1));
+            border-left: 4px solid #f59e0b;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        
+        .insight-box h4 {
+            color: #f59e0b;
+            margin-bottom: 10px;
+        }
+        
+        /* Scale Reference */
+        .scale-reference {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px;
+            background: rgba(15, 23, 42, 0.6);
+            border-radius: 10px;
+            margin-top: 15px;
+            font-size: 0.9em;
+        }
+        
+        .scale-icon {
+            font-size: 2em;
+        }
+        
+        @media (max-width: 900px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+            .full-width {
+                grid-column: span 1;
+            }
+            .comparison-tool {
+                grid-template-columns: 1fr;
+            }
+            .vs-badge {
+                margin: 10px auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🌍 Macro Scale Explorer</h1>
+        <p>Understand the true scale of global economics. Compare GDP, market caps, and asset classes to gain perspective on "how big is big."</p>
+    </div>
+
+    <div class="dashboard">
+        <!-- Comparison Tool -->
+        <div class="panel full-width">
+            <h2>Side-by-Side Comparison</h2>
+            <div class="comparison-tool">
+                <div class="compare-item">
+                    <label>Select Item A</label>
+                    <select id="itemA" onchange="updateComparison()">
+                        <option value="us_gdp">US GDP ($27.4T)</option>
+                        <option value="china_gdp">China GDP ($17.8T)</option>
+                        <option value="apple_mcap">Apple Market Cap ($3.5T)</option>
+                        <option value="btc_mcap">Bitcoin Market Cap ($1.3T)</option>
+                        <option value="gold_mcap">Gold Market Cap ($13T)</option>
+                        <option value="global_stocks">Global Stock Market ($95T)</option>
+                        <option value="us_realestate">US Real Estate ($45T)</option>
+                        <option value="global_debt">Global Debt ($315T)</option>
+                        <option value="fed_balance">Fed Balance Sheet ($7.5T)</option>
+                        <option value="apple_revenue">Apple Annual Revenue ($385B)</option>
+                        <option value="us_military">US Military Budget ($886B)</option>
+                        <option value="crypto_total">Total Crypto Market ($2.5T)</option>
+                        <option value="tesla_mcap">Tesla Market Cap ($800B)</option>
+                        <option value="nvidia_mcap">NVIDIA Market Cap ($3T)</option>
+                        <option value="saudi_aramco">Saudi Aramco ($1.8T)</option>
+                        <option value="microsoft_mcap">Microsoft ($3T)</option>
+                    </select>
+                    <div id="valueA" style="font-size: 1.3em; font-weight: bold; color: #60a5fa; margin-top: 10px;">$27.4 Trillion</div>
+                </div>
+                
+                <div class="vs-badge">VS</div>
+                
+                <div class="compare-item">
+                    <label>Select Item B</label>
+                    <select id="itemB" onchange="updateComparison()">
+                        <option value="apple_mcap">Apple Market Cap ($3.5T)</option>
+                        <option value="us_gdp">US GDP ($27.4T)</option>
+                        <option value="china_gdp">China GDP ($17.8T)</option>
+                        <option value="btc_mcap">Bitcoin Market Cap ($1.3T)</option>
+                        <option value="gold_mcap">Gold Market Cap ($13T)</option>
+                        <option value="global_stocks">Global Stock Market ($95T)</option>
+                        <option value="us_realestate">US Real Estate ($45T)</option>
+                        <option value="global_debt">Global Debt ($315T)</option>
+                        <option value="fed_balance">Fed Balance Sheet ($7.5T)</option>
+                        <option value="apple_revenue">Apple Annual Revenue ($385B)</option>
+                        <option value="us_military">US Military Budget ($886B)</option>
+                        <option value="crypto_total">Total Crypto Market ($2.5T)</option>
+                        <option value="tesla_mcap">Tesla Market Cap ($800B)</option>
+                        <option value="nvidia_mcap">NVIDIA Market Cap ($3T)</option>
+                        <option value="saudi_aramco">Saudi Aramco ($1.8T)</option>
+                        <option value="microsoft_mcap">Microsoft ($3T)</option>
+                    </select>
+                    <div id="valueB" style="font-size: 1.3em; font-weight: bold; color: #f87171; margin-top: 10px;">$3.5 Trillion</div>
+                </div>
+            </div>
+            
+            <div class="comparison-result">
+                <div id="comparisonText" style="font-size: 1.2em; margin-bottom: 15px;">
+                    US GDP is <strong>7.8x larger</strong> than Apple's market cap
+                </div>
+                <div class="scale-bar">
+                    <div id="scaleBarA" class="scale-fill scale-left" style="width: 88.7%">A (88.7%)</div>
+                </div>
+                <div class="scale-bar">
+                    <div id="scaleBarB" class="scale-fill scale-right" style="width: 11.3%">B (11.3%)</div>
+                </div>
+            </div>
+            
+            <div class="insight-box">
+                <h4>💡 Perspective</h4>
+                <p id="perspectiveText">Apple could fit into the US economy 7.8 times. In fact, the entire US stock market is only about 3.5x the size of the US economy, showing how concentrated value is in public markets.</p>
+            </div>
+        </div>
+
+        <!-- GDP by Country -->
+        <div class="panel">
+            <h2>GDP by Country (Top 15)</h2>
+            <div class="category-pills">
+                <span class="pill active" onclick="switchChart('gdp')">Total GDP</span>
+                <span class="pill" onclick="switchChart('gdp_per_capita')">Per Capita</span>
+                <span class="pill" onclick="switchChart('gdp_growth')">Growth Rate</span>
+            </div>
+            <div class="chart-container">
+                <canvas id="gdpChart"></canvas>
+            </div>
+            <div class="insight-box">
+                <h4>Key Insight</h4>
+                <p>The US and China together account for ~43% of global GDP. India's GDP is roughly equal to Apple's market cap + Microsoft's market cap combined.</p>
+            </div>
+        </div>
+
+        <!-- Market Cap Comparisons -->
+        <div class="panel">
+            <h2>Asset Class Sizes</h2>
+            <div class="category-pills">
+                <span class="pill active" onclick="switchAssetChart('all')">All Assets</span>
+                <span class="pill" onclick="switchAssetChart('stocks')">Stocks Only</span>
+                <span class="pill" onclick="switchAssetChart('crypto')">Crypto</span>
+                <span class="pill" onclick="switchAssetChart('commodities')">Commodities</span>
+            </div>
+            <div class="chart-container">
+                <canvas id="assetChart"></canvas>
+            </div>
+            <div class="insight-box">
+                <h4>Key Insight</h4>
+                <p>Global real estate ($280T) is larger than global stocks ($95T) and global debt ($315T) combined. Gold is roughly 4x the size of Bitcoin.</p>
+            </div>
+        </div>
+
+        <!-- Industry Breakdown -->
+        <div class="panel">
+            <h2>US Economy by Industry</h2>
+            <div class="chart-container">
+                <canvas id="industryChart"></canvas>
+            </div>
+            <div class="insight-box">
+                <h4>Key Insight</h4>
+                <p>Services (80.2%) dominate the US economy. Manufacturing is only 10.8%, yet it gets disproportionate political attention. Finance alone is 7.4% of GDP.</p>
+            </div>
+        </div>
+
+        <!-- Company vs Country -->
+        <div class="panel">
+            <h2>Companies vs Countries</h2>
+            <div class="chart-container">
+                <canvas id="companyCountryChart"></canvas>
+            </div>
+            <div class="insight-box">
+                <h4>Key Insight</h4>
+                <p>Apple's revenue ($385B) is larger than the GDP of 85% of countries. If Apple were a country, it would rank ~40th in the world by GDP, between Vietnam and Bangladesh.</p>
+            </div>
+        </div>
+
+        <!-- Quick Reference Grid -->
+        <div class="panel full-width">
+            <h2>Scale Reference - Quick Comparisons</h2>
+            <div class="data-grid">
+                <div class="data-card" onclick="selectInComparison('global_debt', 'itemA')">
+                    <h3>🌍 Global Debt</h3>
+                    <div class="value">$315T</div>
+                    <div class="subtext">350% of global GDP</div>
+                </div>
+                <div class="data-card" onclick="selectInComparison('global_stocks', 'itemA')">
+                    <h3>📈 Global Stocks</h3>
+                    <div class="value">$95T</div>
+                    <div class="subtext">~100% of global GDP</div>
+                </div>
+                <div class="data-card" onclick="selectInComparison('us_gdp', 'itemA')">
+                    <h3>🇺🇸 US GDP</h3>
+                    <div class="value">$27.4T</div>
+                    <div class="subtext">25% of world economy</div>
+                </div>
+                <div class="data-card" onclick="selectInComparison('us_realestate', 'itemA')">
+                    <h3>🏠 US Real Estate</h3>
+                    <div class="value">$45T</div>
+                    <div class="subtext">1.6x US GDP</div>
+                </div>
+                <div class="data-card" onclick="selectInComparison('apple_mcap', 'itemA')">
+                    <h3>🍎 Apple</h3>
+                    <div class="value">$3.5T</div>
+                    <div class="subtext">13% of US GDP</div>
+                </div>
+                <div class="data-card" onclick="selectInComparison('gold_mcap', 'itemA')">
+                    <h3>🥇 Gold</h3>
+                    <div class="value">$13T</div>
+                    <div class="subtext">All gold ever mined</div>
+                </div>
+                <div class="data-card" onclick="selectInComparison('btc_mcap', 'itemA')">
+                    <h3>₿ Bitcoin</h3>
+                    <div class="value">$1.3T</div>
+                    <div class="subtext">37% of Apple's value</div>
+                </div>
+                <div class="data-card" onclick="selectInComparison('fed_balance', 'itemA')">
+                    <h3>🏛️ Fed Balance Sheet</h3>
+                    <div class="value">$7.5T</div>
+                    <div class="subtext">Down from $9T peak</div>
+                </div>
+            </div>
+            
+            <div class="scale-reference">
+                <div class="scale-icon">📊</div>
+                <div>
+                    <strong>Scale Context:</strong> If $1 = 1 pixel, then $1 Trillion = 1,000 kilometers. 
+                    The distance from New York to Chicago is about $1.3 Trillion. 
+                    Global debt ($315T) would wrap around Earth 7.8 times.
+                </div>
+            </div>
+        </div>
+
+        <!-- Mind Blowing Comparisons -->
+        <div class="panel full-width">
+            <h2>🤯 Mind-Blowing Comparisons</h2>
+            <div class="data-grid">
+                <div class="data-card">
+                    <h3>Apple vs Federal Budget</h3>
+                    <div style="font-size: 1em; margin: 10px 0;">Apple's annual revenue ($385B) equals the US military budget ($886B) minus Medicare Advantage payments ($500B).</div>
+                </div>
+                <div class="data-card">
+                    <h3>Bitcoin vs Gold</h3>
+                    <div style="font-size: 1em; margin: 10px 0;">All Bitcoin ever mined ($1.3T) is worth less than just the gold held by central banks ($2.8T).</div>
+                </div>
+                <div class="data-card">
+                    <h3>US Real Estate vs Stocks</h3>
+                    <div style="font-size: 1em; margin: 10px 0;">The value of all US homes ($45T) is roughly equal to the entire US stock market ($48T).</div>
+                </div>
+                <div class="data-card">
+                    <h3>Global Debt vs Gold</h3>
+                    <div style="font-size: 1em; margin: 10px 0;">Global debt ($315T) is 24x larger than all gold ever mined ($13T). Gold can't back currencies anymore.</div>
+                </div>
+                <div class="data-card">
+                    <h3>NVIDIA vs Countries</h3>
+                    <div style="font-size: 1em; margin: 10px 0;">NVIDIA's market cap ($3T) exceeds the GDP of all but 7 countries. It's worth more than the UK ($3.1T vs $3.3T).</div>
+                </div>
+                <div class="data-card">
+                    <h3>Crypto vs Tech Giants</h3>
+                    <div style="font-size: 1em; margin: 10px 0;">The entire crypto market ($2.5T) is smaller than just Microsoft ($3T) or Apple ($3.5T) individually.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Data Store
+        const data = {
+            us_gdp: { value: 27.4, label: "US GDP", unit: "T" },
+            china_gdp: { value: 17.8, label: "China GDP", unit: "T" },
+            apple_mcap: { value: 3.5, label: "Apple Market Cap", unit: "T" },
+            btc_mcap: { value: 1.3, label: "Bitcoin Market Cap", unit: "T" },
+            gold_mcap: { value: 13, label: "Gold Market Cap", unit: "T" },
+            global_stocks: { value: 95, label: "Global Stock Market", unit: "T" },
+            us_realestate: { value: 45, label: "US Real Estate", unit: "T" },
+            global_debt: { value: 315, label: "Global Debt", unit: "T" },
+            fed_balance: { value: 7.5, label: "Fed Balance Sheet", unit: "T" },
+            apple_revenue: { value: 0.385, label: "Apple Revenue", unit: "T" },
+            us_military: { value: 0.886, label: "US Military Budget", unit: "T" },
+            crypto_total: { value: 2.5, label: "Total Crypto Market", unit: "T" },
+            tesla_mcap: { value: 0.8, label: "Tesla Market Cap", unit: "T" },
+            nvidia_mcap: { value: 3, label: "NVIDIA Market Cap", unit: "T" },
+            saudi_aramco: { value: 1.8, label: "Saudi Aramco", unit: "T" },
+            microsoft_mcap: { value: 3, label: "Microsoft", unit: "T" }
+        };
+
+        // Initialize Charts
+        let gdpChart, assetChart, industryChart, companyCountryChart;
+
+        function initCharts() {
+            // GDP Chart
+            const gdpCtx = document.getElementById('gdpChart').getContext('2d');
+            gdpChart = new Chart(gdpCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['USA', 'China', 'Germany', 'Japan', 'India', 'UK', 'France', 'Italy', 'Brazil', 'Canada', 'Russia', 'Mexico', 'S. Korea', 'Australia', 'Spain'],
+                    datasets: [{
+                        label: 'GDP (Trillions USD)',
+                        data: [27.4, 17.8, 4.4, 4.2, 3.7, 3.3, 3.0, 2.2, 2.1, 2.1, 2.0, 1.8, 1.7, 1.7, 1.6],
+                        backgroundColor: [
+                            '#3b82f6', '#ef4444', '#f59e0b', '#10b981', '#8b5cf6',
+                            '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1',
+                            '#14b8a6', '#f43f5e', '#8b5cf6', '#10b981', '#f59e0b'
+                        ],
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255,255,255,0.1)' },
+                            ticks: { color: '#94a3b8' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#94a3b8' }
+                        }
+                    }
+                }
+            });
+
+            // Asset Chart
+            const assetCtx = document.getElementById('assetChart').getContext('2d');
+            assetChart = new Chart(assetCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Global Real Estate', 'Global Debt', 'Global Stocks', 'Gold', 'US Real Estate', 'Fed Balance Sheet', 'Apple', 'Microsoft', 'Bitcoin', 'Crypto (ex-BTC)'],
+                    datasets: [{
+                        data: [280, 315, 95, 13, 45, 7.5, 3.5, 3, 1.3, 1.2],
+                        backgroundColor: [
+                            '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6',
+                            '#ec4899', '#6366f1', '#14b8a6', '#f97316', '#84cc16'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: { color: '#e2e8f0', font: { size: 11 } }
+                        }
+                    }
+                }
+            });
+
+            // Industry Chart
+            const industryCtx = document.getElementById('industryChart').getContext('2d');
+            industryChart = new Chart(industryCtx, {
+                type: 'pie',
+                data: {
+                    labels: ['Services (80.2%)', 'Industry (18.9%)', 'Agriculture (0.9%)'],
+                    datasets: [{
+                        data: [80.2, 18.9, 0.9],
+                        backgroundColor: ['#3b82f6', '#f59e0b', '#10b981']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#e2e8f0', font: { size: 12 } }
+                        }
+                    }
+                }
+            });
+
+            // Company vs Country Chart
+            const ccCtx = document.getElementById('companyCountryChart').getContext('2d');
+            companyCountryChart = new Chart(ccCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Apple', 'Microsoft', 'NVIDIA', 'Saudi Aramco', 'Amazon', 'Google', 'Tesla', 'Meta', 'Bitcoin', 'Switzerland', 'Turkey', 'Taiwan', 'Poland', 'Argentina', 'Vietnam'],
+                    datasets: [{
+                        label: 'Market Cap / GDP ($T)',
+                        data: [3.5, 3, 3, 1.8, 1.9, 2, 0.8, 1.2, 1.3, 0.9, 1.1, 0.75, 0.8, 0.6, 0.45],
+                        backgroundColor: [
+                            '#6366f1', '#6366f1', '#6366f1', '#6366f1', '#6366f1',
+                            '#6366f1', '#6366f1', '#6366f1', '#f97316',
+                            '#10b981', '#10b981', '#10b981', '#10b981', '#10b981', '#10b981'
+                        ],
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            grid: { color: 'rgba(255,255,255,0.1)' },
+                            ticks: { color: '#94a3b8' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#94a3b8', font: { size: 10 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateComparison() {
+            const itemA = document.getElementById('itemA').value;
+            const itemB = document.getElementById('itemB').value;
+            
+            const dataA = data[itemA];
+            const dataB = data[itemB];
+            
+            document.getElementById('valueA').textContent = `$${dataA.value} ${dataA.unit === 'T' ? 'Trillion' : 'Billion'}`;
+            document.getElementById('valueB').textContent = `$${dataB.value} ${dataB.unit === 'T' ? 'Trillion' : 'Billion'}`;
+            
+            const ratio = dataA.value / dataB.value;
+            const total = dataA.value + dataB.value;
+            const percentA = (dataA.value / total) * 100;
+            const percentB = (dataB.value / total) * 100;
+            
+            let comparisonText = '';
+            if (ratio > 1) {
+                comparisonText = `${dataA.label} is <strong>${ratio.toFixed(1)}x larger</strong> than ${dataB.label}`;
+            } else {
+                comparisonText = `${dataA.label} is <strong>${(1/ratio).toFixed(1)}x smaller</strong> than ${dataB.label}`;
+            }
+            document.getElementById('comparisonText').innerHTML = comparisonText;
+            
+            document.getElementById('scaleBarA').style.width = `${percentA}%`;
+            document.getElementById('scaleBarA').textContent = `A (${percentA.toFixed(1)}%)`;
+            document.getElementById('scaleBarB').style.width = `${percentB}%`;
+            document.getElementById('scaleBarB').textContent = `B (${percentB.toFixed(1)}%)`;
+            
+            // Update perspective
+            let perspective = '';
+            if (ratio > 10) {
+                perspective = `${dataB.label} could fit into ${dataA.label} ${Math.floor(ratio)} times with room to spare. This shows the massive scale difference between these two economic entities.`;
+            } else if (ratio > 2) {
+                perspective = `${dataA.label} is significantly larger, but they're in the same order of magnitude. Both represent major economic forces.`;
+            } else if (ratio > 0.5) {
+                perspective = `These are roughly comparable in size. The difference is less than 2x, meaning they operate at similar scales economically.`;
+            } else {
+                perspective = `${dataA.label} is dwarfed by ${dataB.label}. This scale difference has significant implications for market impact and influence.`;
+            }
+            document.getElementById('perspectiveText').textContent = perspective;
+        }
+
+        function selectInComparison(itemId, selectId) {
+            document.getElementById(selectId).value = itemId;
+            updateComparison();
+        }
+
+        function switchChart(type) {
+            // Update GDP chart based on selection
+            if (type === 'gdp') {
+                gdpChart.data.datasets[0].data = [27.4, 17.8, 4.4, 4.2, 3.7, 3.3, 3.0, 2.2, 2.1, 2.1, 2.0, 1.8, 1.7, 1.7, 1.6];
+                gdpChart.data.datasets[0].label = 'GDP (Trillions USD)';
+            } else if (type === 'gdp_per_capita') {
+                gdpChart.data.datasets[0].data = [80.4, 12.6, 52.7, 33.8, 2.6, 48.9, 44.4, 37.1, 9.9, 54.9, 13.8, 14.0, 33.1, 65.4, 34.0];
+                gdpChart.data.datasets[0].label = 'GDP Per Capita (Thousands USD)';
+            } else if (type === 'gdp_growth') {
+                gdpChart.data.datasets[0].data = [2.5, 5.2, -0.3, 1.9, 7.2, 0.1, 0.9, 0.9, 2.9, 1.1, 3.6, 3.2, 1.4, 1.6, 5.0];
+                gdpChart.data.datasets[0].label = 'GDP Growth Rate (%)';
+            }
+            gdpChart.update();
+            
+            // Update active pill
+            document.querySelectorAll('.category-pills .pill').forEach(pill => {
+                pill.classList.remove('active');
+            });
+            event.target.classList.add('active');
+        }
+
+        function switchAssetChart(type) {
+            if (type === 'all') {
+                assetChart.data.labels = ['Global Real Estate', 'Global Debt', 'Global Stocks', 'Gold', 'US Real Estate', 'Fed Balance Sheet', 'Apple', 'Microsoft', 'Bitcoin', 'Crypto (ex-BTC)'];
+                assetChart.data.datasets[0].data = [280, 315, 95, 13, 45, 7.5, 3.5, 3, 1.3, 1.2];
+            } else if (type === 'stocks') {
+                assetChart.data.labels = ['US Stocks', 'China Stocks', 'Japan', 'UK', 'India', 'France', 'Germany', 'Canada', 'Switzerland', 'Australia'];
+                assetChart.data.datasets[0].data = [48, 11, 6, 3.5, 4, 3.2, 2.3, 3, 2.1, 1.8];
+            } else if (type === 'crypto') {
+                assetChart.data.labels = ['Bitcoin', 'Ethereum', 'Tether', 'BNB', 'Solana', 'XRP', 'USDC', 'Cardano', 'Dogecoin', 'Others'];
+                assetChart.data.datasets[0].data = [1.3, 0.4, 0.14, 0.09, 0.08, 0.14, 0.04, 0.03, 0.02, 0.32];
+            } else if (type === 'commodities') {
+                assetChart.data.labels = ['Gold', 'Oil (annual trade)', 'Copper', 'Silver', 'Wheat', 'Corn', 'Natural Gas', 'Coffee', 'Cotton', 'Sugar'];
+                assetChart.data.datasets[0].data = [13, 2.5, 0.2, 1.4, 0.05, 0.08, 0.3, 0.05, 0.02, 0.03];
+            }
+            assetChart.update();
+        }
+
+        // Initialize on load
+        window.onload = function() {
+            initCharts();
+            updateComparison();
+        };
+    </script>
+</body>
+</html>
