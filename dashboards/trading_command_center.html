@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Command Center - Unified Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #0a0f1a 0%, #1a2332 100%);
+            color: #e8ecf1;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            padding: 30px;
+            background: linear-gradient(135deg, #2563eb, #7c3aed);
+            border-radius: 20px;
+            margin-bottom: 25px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header .subtitle {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        
+        .status-bar {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255,255,255,0.1);
+            padding: 8px 16px;
+            border-radius: 20px;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-dot.online { background: #10b981; }
+        .status-dot.warning { background: #f59e0b; }
+        .status-dot.offline { background: #ef4444; }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .dashboard {
+            max-width: 1800px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+        
+        .panel {
+            background: rgba(30, 41, 59, 0.9);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .panel h2 {
+            color: #60a5fa;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .panel h2::before {
+            content: "◆";
+            color: #3b82f6;
+        }
+        
+        .panel.wide { grid-column: span 2; }
+        .panel.full { grid-column: span 3; }
+        
+        /* Opportunity Cards */
+        .opportunity-card {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(245, 158, 11, 0.1));
+            border-left: 4px solid #ef4444;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .opportunity-card.high {
+            border-left-color: #ef4444;
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(245, 158, 11, 0.1));
+        }
+        
+        .opportunity-card.medium {
+            border-left-color: #f59e0b;
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(59, 130, 246, 0.1));
+        }
+        
+        .opp-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .opp-asset {
+            font-weight: bold;
+            font-size: 1.1em;
+            color: #f87171;
+        }
+        
+        .opp-score {
+            background: rgba(239, 68, 68, 0.2);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+        
+        .opp-spread {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #fbbf24;
+            margin: 5px 0;
+        }
+        
+        .opp-exchanges {
+            font-size: 0.85em;
+            opacity: 0.8;
+        }
+        
+        .opp-setup {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            font-size: 0.9em;
+        }
+        
+        /* Mover Cards */
+        .mover-card {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 10px;
+            margin-bottom: 8px;
+        }
+        
+        .mover-rank {
+            font-weight: bold;
+            color: #64748b;
+            width: 30px;
+        }
+        
+        .mover-symbol {
+            font-weight: bold;
+            width: 80px;
+        }
+        
+        .mover-price {
+            flex: 1;
+            text-align: right;
+            font-family: monospace;
+        }
+        
+        .mover-change {
+            width: 90px;
+            text-align: right;
+            font-weight: bold;
+        }
+        
+        .mover-change.up { color: #10b981; }
+        .mover-change.down { color: #ef4444; }
+        
+        .mover-type {
+            margin-left: 10px;
+            padding: 3px 8px;
+            border-radius: 8px;
+            font-size: 0.75em;
+            background: rgba(59, 130, 246, 0.2);
+        }
+        
+        /* Exchange Status Grid */
+        .exchange-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+        
+        .exchange-item {
+            padding: 15px;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .exchange-name {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .exchange-markets {
+            font-size: 1.5em;
+            color: #60a5fa;
+            font-weight: bold;
+        }
+        
+        .exchange-status {
+            font-size: 0.8em;
+            margin-top: 5px;
+        }
+        
+        .exchange-status.online { color: #10b981; }
+        .exchange-status.offline { color: #ef4444; }
+        
+        /* Chart Containers */
+        .chart-container {
+            position: relative;
+            height: 250px;
+        }
+        
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+        
+        .stat-card {
+            padding: 15px;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .stat-label {
+            font-size: 0.85em;
+            opacity: 0.7;
+            margin-bottom: 5px;
+        }
+        
+        .stat-value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #60a5fa;
+        }
+        
+        /* Last Update */
+        .last-update {
+            text-align: center;
+            padding: 15px;
+            font-size: 0.9em;
+            opacity: 0.7;
+        }
+        
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            opacity: 0.5;
+        }
+        
+        /* Refresh Button */
+        .refresh-btn {
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s;
+        }
+        
+        .refresh-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(59, 130, 246, 0.4);
+        }
+        
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .dashboard { grid-template-columns: repeat(2, 1fr); }
+            .panel.full { grid-column: span 2; }
+            .panel.wide { grid-column: span 2; }
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard { grid-template-columns: 1fr; }
+            .panel.full, .panel.wide { grid-column: span 1; }
+            .exchange-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎯 Trading Command Center</h1>
+        <div class="subtitle">Unified Dashboard for Funding Arb, Big Moves & Market Intelligence</div>
+        
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-dot online"></div>
+                <span>Funding Scanner: 8 Exchanges</span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot online"></div>
+                <span>Big Move Alert: 80+ Assets</span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot online"></div>
+                <span>Live Data Feed</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard">
+        <!-- Exchange Status Panel -->
+        <div class="panel full">
+            <h2>Exchange Status (8 Exchanges)</h2>
+            <div class="exchange-grid" id="exchangeGrid">
+                <!-- Filled by JS -->
+            </div>
+        </div>
+
+        <!-- Top Funding Opportunities -->
+        <div class="panel wide">
+            <h2>🔥 Top Funding Arbitrage Opportunities</h2>
+            <div id="opportunitiesList">
+                <div class="empty-state">Loading opportunities...⏳</div>
+            </div>
+        </div>
+
+        <!-- Market Stats -->
+        <div class="panel">
+            <h2>📊 Market Statistics</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Markets Scanned</div>
+                    <div class="stat-value" id="totalMarkets">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Active Opportunities</div>
+                    <div class="stat-value" id="activeOpps">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Crypto Assets</div>
+                    <div class="stat-value" id="cryptoCount">50+</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Stock Tickers</div>
+                    <div class="stat-value" id="stockCount">30+</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Movers -->
+        <div class="panel wide">
+            <h2>📈 Top 10 Biggest Movers (24h)</h2>
+            <div id="moversList">
+                <div class="empty-state">Loading movers...⏳</div>
+            </div>
+        </div>
+
+        <!-- Funding Spread Chart -->
+        <div class="panel">
+            <h2>Funding Spread Distribution</h2>
+            <div class="chart-container">
+                <canvas id="spreadChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Alert History -->
+        <div class="panel wide">
+            <h2>🚨 Recent Alerts</h2>
+            <div id="alertsList">
+                <div class="empty-state">No recent alerts</div>
+            </div>
+        </div>
+
+        <!-- Last Update -->
+        <div class="panel full">
+            <div class="last-update">
+                Last updated: <span id="lastUpdate">Never</span>
+                <button class="refresh-btn" onclick="loadData()" style="margin-left: 20px;">🔄 Refresh</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Exchange display names
+        const exchangeNames = {
+            'binance': 'Binance',
+            'hyperliquid': 'Hyperliquid',
+            'bybit': 'Bybit',
+            'okx': 'OKX',
+            'dydx': 'dYdX',
+            'kucoin': 'KuCoin',
+            'gmx': 'GMX V2',
+            'drift': 'Drift'
+        };
+
+        // Sample data for demo (will be replaced by real data)
+        let fundingData = null;
+        let bigMoveData = null;
+
+        async function loadData() {
+            try {
+                // In production, these would be fetched from your data files
+                // For now, showing the structure
+                
+                // Simulated fetch - replace with actual file reading
+                // const fundingResponse = await fetch('data/funding_arb_data.json');
+                // const bigMoveResponse = await fetch('data/big_move_data.json');
+                
+                // For demo purposes, showing empty state that updates on real data
+                updateLastUpdate();
+            } catch (e) {
+                console.error('Error loading data:', e);
+            }
+        }
+
+        function updateExchangeGrid(status) {
+            const grid = document.getElementById('exchangeGrid');
+            grid.innerHTML = '';
+            
+            for (const [key, name] of Object.entries(exchangeNames)) {
+                const isOnline = status && status[key];
+                const markets = status && status.marketCounts && status.marketCounts[key] || 0;
+                
+                const item = document.createElement('div');
+                item.className = 'exchange-item';
+                item.innerHTML = `
+                    <div class="exchange-name">${name}</div>
+                    <div class="exchange-markets">${markets || '--'}</div>
+                    <div class="exchange-status ${isOnline ? 'online' : 'offline'}">${isOnline ? '● Online' : '○ Offline'}</div>
+                `;
+                grid.appendChild(item);
+            }
+        }
+
+        function renderOpportunities(opportunities) {
+            const container = document.getElementById('opportunitiesList');
+            
+            if (!opportunities || opportunities.length === 0) {
+                container.innerHTML = '<div class="empty-state">No opportunities above threshold</div>';
+                return;
+            }
+            
+            container.innerHTML = '';
+            
+            opportunities.slice(0, 10).forEach(opp => {
+                const isHigh = opp.score > 0.1;
+                const card = document.createElement('div');
+                card.className = `opportunity-card ${isHigh ? 'high' : 'medium'}`;
+                
+                const fundingLines = Object.entries(opp.fundings)
+                    .sort((a, b) => a[1] - b[1])
+                    .map(([ex, rate]) => `${ex}: ${(rate * 100).toFixed(4)}%`)
+                    .join(' | ');
+                
+                card.innerHTML = `
+                    <div class="opp-header">
+                        <div class="opp-asset">${opp.asset}</div>
+                        <div class="opp-score">Score: ${opp.score.toFixed(2)}</div>
+                    </div>
+                    <div class="opp-spread">Spread: ${(opp.spread * 100).toFixed(4)}%</div>
+                    <div class="opp-exchanges">${fundingLines}</div>
+                    <div class="opp-setup">💚 Long: ${opp.best_long} | ❤️ Short: ${opp.best_short}</div>
+                `;
+                
+                container.appendChild(card);
+            });
+            
+            // Update stats
+            document.getElementById('activeOpps').textContent = opportunities.length;
+        }
+
+        function renderMovers(movers) {
+            const container = document.getElementById('moversList');
+            
+            if (!movers || movers.length === 0) {
+                container.innerHTML = '<div class="empty-state">No significant moves detected</div>';
+                return;
+            }
+            
+            container.innerHTML = '';
+            
+            movers.slice(0, 10).forEach((mover, index) => {
+                const card = document.createElement('div');
+                card.className = 'mover-card';
+                
+                const changeClass = mover.change >= 0 ? 'up' : 'down';
+                const arrow = mover.change >= 0 ? '↑' : '↓';
+                
+                card.innerHTML = `
+                    <div class="mover-rank">${index + 1}</div>
+                    <div class="mover-symbol">${mover.symbol}</div>
+                    <div class="mover-price">$${mover.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 4})}</div>
+                    <div class="mover-change ${changeClass}">${arrow} ${Math.abs(mover.change).toFixed(2)}%</div>
+                    <div class="mover-type">${mover.type}</div>
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+
+        function renderSpreadChart(opportunities) {
+            const ctx = document.getElementById('spreadChart').getContext('2d');
+            
+            if (!opportunities || opportunities.length === 0) return;
+            
+            const spreads = opportunities.slice(0, 15).map(o => (o.spread * 100));
+            const labels = opportunities.slice(0, 15).map(o => o.asset);
+            
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Funding Spread (%)',
+                        data: spreads,
+                        backgroundColor: spreads.map(s => s > 0.1 ? '#ef4444' : '#f59e0b'),
+                        borderRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255,255,255,0.1)' },
+                            ticks: { color: '#94a3b8' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#94a3b8', font: { size: 10 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateLastUpdate() {
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent = now.toLocaleString();
+        }
+
+        // Auto-refresh every 10 seconds
+        setInterval(loadData, 10000);
+        
+        // Initial load
+        loadData();
+        
+        // Demo: Show sample data structure
+        setTimeout(() => {
+            updateExchangeGrid({
+                binance: true, hyperliquid: true, bybit: true, okx: true,
+                dydx: true, kucoin: true, gmx: true, drift: true,
+                marketCounts: {
+                    binance: 250, hyperliquid: 180, bybit: 200, okx: 220,
+                    dydx: 45, kucoin: 150, gmx: 12, drift: 25
+                }
+            });
+            document.getElementById('totalMarkets').textContent = '1,082';
+        }, 500);
+    </script>
+</body>
+</html>
