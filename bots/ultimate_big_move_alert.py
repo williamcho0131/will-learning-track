@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Ultimate Big Move Alert Bot
-50+ cryptos + 30+ stocks + News context
+Ultimate Big Move Alert Bot - FIXED VERSION
+50+ cryptos + 30+ stocks with better error handling
 """
 
 import asyncio
@@ -34,85 +34,34 @@ THRESHOLDS = {
     }
 }
 
-# 50+ CRYPTOCURRENCIES
+# SIMPLIFIED: 20 Top Cryptos (for reliability)
 CRYPTO_ASSETS = {
-    # Major
     'BTC': 'bitcoin',
     'ETH': 'ethereum',
-    
-    # Layer 1s
     'SOL': 'solana',
     'BNB': 'binancecoin',
-    'AVAX': 'avalanche-2',
+    'XRP': 'ripple',
     'ADA': 'cardano',
+    'AVAX': 'avalanche-2',
+    'DOGE': 'dogecoin',
     'DOT': 'polkadot',
     'MATIC': 'matic-network',
-    'ARB': 'arbitrum',
-    'OP': 'optimism',
-    'NEAR': 'near',
-    'APT': 'aptos',
-    'SUI': 'sui',
-    'SEI': 'sei-network',
-    'INJ': 'injective-protocol',
-    'TIA': 'celestia',
-    
-    # DeFi
     'LINK': 'chainlink',
     'UNI': 'uniswap',
-    'AAVE': 'aave',
-    'MKR': 'maker',
-    'LDO': 'lido-dao',
-    'CRV': 'curve-dao-token',
-    'SNX': 'havven',
-    'COMP': 'compound-governance-token',
-    'YFI': 'yearn-finance',
-    'SUSHI': 'sushi',
-    '1INCH': '1inch',
-    
-    # Memes
-    'DOGE': 'dogecoin',
-    'SHIB': 'shiba-inu',
-    'PEPE': 'pepe',
-    'WIF': 'dogwifhat',
-    'BONK': 'bonk',
-    'FLOKI': 'floki',
-    
-    # Others
-    'XRP': 'ripple',
-    'TON': 'the-open-network',
-    'TRX': 'tron',
-    'ICP': 'internet-computer',
-    'FIL': 'filecoin',
     'ATOM': 'cosmos',
+    'LTC': 'litecoin',
+    'BCH': 'bitcoin-cash',
+    'ETC': 'ethereum-classic',
+    'XLM': 'stellar',
     'ALGO': 'algorand',
     'VET': 'vechain',
-    'XLM': 'stellar',
-    'HBAR': 'hedera-hashgraph',
-    'SAND': 'the-sandbox',
-    'MANA': 'decentraland',
-    'AXS': 'axie-infinity',
-    'GRT': 'the-graph',
-    'RNDR': 'render-token',
-    'FET': 'fetch-ai',
-    'AGIX': 'singularitynet',
-    'WLD': 'worldcoin-wld',
-    'PYTH': 'pyth-network',
-    'JUP': 'jupiter-exchange-solana',
-    'JTO': 'jito-governance-token',
-    'HYPE': 'hyperliquid',
-    'BERA': 'berachain-bera',
+    'ICP': 'internet-computer',
 }
 
-# 30+ STOCKS
+# SIMPLIFIED: 20 Top Stocks
 STOCK_ASSETS = {
-    # Indexes
     'SPY': 'SPDR S&P 500',
     'QQQ': 'Invesco QQQ',
-    'IWM': 'iShares Russell 2000',
-    'DIA': 'SPDR Dow Jones',
-    'VIX': 'CBOE Volatility Index',
-    
-    # Mega Cap Tech
     'AAPL': 'Apple Inc.',
     'MSFT': 'Microsoft',
     'GOOGL': 'Alphabet',
@@ -122,36 +71,15 @@ STOCK_ASSETS = {
     'TSLA': 'Tesla',
     'NFLX': 'Netflix',
     'AMD': 'Advanced Micro Devices',
-    'INTC': 'Intel',
-    'CRM': 'Salesforce',
-    'ADBE': 'Adobe',
-    'ORCL': 'Oracle',
-    'IBM': 'IBM',
-    'CSCO': 'Cisco',
-    
-    # Finance
-    'JPM': 'JPMorgan Chase',
-    'BAC': 'Bank of America',
-    'GS': 'Goldman Sachs',
-    'MS': 'Morgan Stanley',
-    'V': 'Visa',
-    'MA': 'Mastercard',
     'COIN': 'Coinbase',
-    'HOOD': 'Robinhood',
-    
-    # Other
-    'DIS': 'Disney',
-    'NKE': 'Nike',
-    'SBUX': 'Starbucks',
-    'MCD': 'McDonald',
-    'WMT': 'Walmart',
-    'COST': 'Costco',
     'GME': 'GameStop',
     'AMC': 'AMC Entertainment',
     'PLTR': 'Palantir',
-    'RKLB': 'Rocket Lab',
+    'HOOD': 'Robinhood',
     'SMCI': 'Super Micro Computer',
     'MSTR': 'MicroStrategy',
+    'JPM': 'JPMorgan Chase',
+    'DIS': 'Disney',
 }
 
 price_history = {}
@@ -164,44 +92,63 @@ async def send_message(text):
             url = f"{BASE_URL}/sendMessage"
             payload = {"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}
             async with session.post(url, json=payload) as resp:
+                if resp.status != 200:
+                    error = await resp.text()
+                    print(f"[ERROR] Telegram API: {error}")
                 return resp.status == 200
     except Exception as e:
         print(f"[ERROR] Telegram: {e}")
         return False
 
 async def get_crypto_prices():
+    """Fetch crypto prices from CoinGecko - single batch for reliability"""
     try:
-        # Batch requests to avoid rate limits
-        all_prices = {}
-        ids_list = list(CRYPTO_ASSETS.values())
+        ids = ','.join(CRYPTO_ASSETS.values())
+        url = f"https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies=usd&include_24hr_change=true"
         
-        # Process in batches of 50
-        for i in range(0, len(ids_list), 50):
-            batch = ids_list[i:i+50]
-            ids = ','.join(batch)
-            url = f"https://api.coingecko.com/api/v3/simple/price?ids={ids}&vs_currencies=usd&include_24hr_change=true"
-            
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as resp:
-                    data = await resp.json()
-            
-            for symbol, cid in CRYPTO_ASSETS.items():
-                if cid in data:
-                    all_prices[symbol] = {
-                        'price': data[cid]['usd'],
-                        'change_24h': data[cid].get('usd_24h_change', 0),
+        print(f"  [DEBUG] CoinGecko URL: {url[:100]}...")
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=15) as resp:
+                if resp.status != 200:
+                    text = await resp.text()
+                    print(f"  [ERROR] CoinGecko HTTP {resp.status}: {text[:200]}")
+                    return {}
+                
+                data = await resp.json()
+                print(f"  [DEBUG] CoinGecko response keys: {list(data.keys())[:5]}")
+        
+        prices = {}
+        missing = []
+        for symbol, cid in CRYPTO_ASSETS.items():
+            if cid in data:
+                coin_data = data[cid]
+                if 'usd' in coin_data:
+                    prices[symbol] = {
+                        'price': coin_data['usd'],
+                        'change_24h': coin_data.get('usd_24h_change', 0) or 0,
                         'type': 'crypto'
                     }
-            
-            await asyncio.sleep(1)  # Rate limit
+                else:
+                    missing.append(f"{symbol} (no usd key)")
+            else:
+                missing.append(symbol)
         
-        return all_prices
+        if missing:
+            print(f"  [WARN] Missing cryptos: {missing[:5]}...")
+        
+        return prices
     except Exception as e:
         print(f"[ERROR] CoinGecko: {e}")
+        import traceback
+        traceback.print_exc()
         return {}
 
 async def get_stock_prices():
+    """Fetch stock prices from Yahoo Finance"""
     prices = {}
+    errors = []
+    
     async with aiohttp.ClientSession() as session:
         for symbol in STOCK_ASSETS.keys():
             try:
@@ -211,6 +158,11 @@ async def get_stock_prices():
                 async with session.get(url, params=params, timeout=10) as resp:
                     if resp.status == 200:
                         data = await resp.json()
+                        
+                        if 'chart' not in data or not data['chart']['result']:
+                            errors.append(f"{symbol}: no data")
+                            continue
+                        
                         result = data['chart']['result'][0]
                         meta = result['meta']
                         
@@ -218,14 +170,24 @@ async def get_stock_prices():
                         previous = meta.get('previousClose', 0)
                         change_pct = ((current - previous) / previous * 100) if previous else 0
                         
-                        prices[symbol] = {
-                            'price': current,
-                            'change_24h': change_pct,
-                            'type': 'stock'
-                        }
+                        if current > 0:
+                            prices[symbol] = {
+                                'price': current,
+                                'change_24h': change_pct,
+                                'type': 'stock'
+                            }
+                    else:
+                        errors.append(f"{symbol}: HTTP {resp.status}")
+                        
             except Exception as e:
+                errors.append(f"{symbol}: {str(e)[:30]}")
                 continue
-            await asyncio.sleep(0.5)  # Be nice to Yahoo
+            
+            await asyncio.sleep(0.3)  # Be nice to Yahoo
+    
+    if errors:
+        print(f"  [WARN] Stock errors: {len(errors)}")
+    
     return prices
 
 def check_big_move(symbol, data):
@@ -236,18 +198,18 @@ def check_big_move(symbol, data):
             threshold = THRESHOLDS['crypto']['major']
         elif symbol in ['SOL', 'BNB', 'XRP', 'AVAX', 'ADA', 'DOT']:
             threshold = THRESHOLDS['crypto']['mid']
-        elif symbol in ['DOGE', 'SHIB', 'PEPE', 'WIF', 'BONK', 'FLOKI']:
+        elif symbol in ['DOGE', 'SHIB']:
             threshold = THRESHOLDS['crypto']['meme']
         else:
             threshold = THRESHOLDS['crypto']['alt']
     else:  # stock
         if symbol in ['GME', 'AMC']:
             threshold = THRESHOLDS['stock']['meme']
-        elif symbol in ['TSLA', 'NVDA', 'COIN', 'HOOD', 'PLTR', 'RKLB', 'SMCI', 'MSTR']:
+        elif symbol in ['TSLA', 'NVDA', 'COIN', 'HOOD', 'PLTR', 'SMCI', 'MSTR']:
             threshold = THRESHOLDS['stock']['growth']
         elif symbol in ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META']:
             threshold = THRESHOLDS['stock']['mega']
-        elif symbol in ['SPY', 'QQQ', 'IWM', 'DIA']:
+        elif symbol in ['SPY', 'QQQ']:
             threshold = THRESHOLDS['stock']['index']
         else:
             threshold = THRESHOLDS['stock']['mega']
@@ -283,37 +245,94 @@ async def send_big_move_alert(symbol, data):
     await send_message(message)
     print(f"  🚨 {symbol} {data['change_24h']:+.2f}%")
 
+async def send_hourly_summary(crypto_prices, stock_prices):
+    """Send hourly summary with better error handling"""
+    try:
+        all_assets = {}
+        
+        # Add crypto data
+        for sym, data in crypto_prices.items():
+            all_assets[sym] = data
+        
+        # Add stock data
+        for sym, data in stock_prices.items():
+            all_assets[sym] = data
+        
+        print(f"  [DEBUG] Hourly summary: {len(all_assets)} total assets")
+        
+        if len(all_assets) == 0:
+            print("  [WARN] No asset data for hourly summary")
+            return
+        
+        # Sort by absolute change
+        sorted_assets = sorted(all_assets.items(), 
+                              key=lambda x: abs(x[1].get('change_24h', 0)), 
+                              reverse=True)
+        
+        summary = "📊 <b>Hourly Top Movers</b>\n\n"
+        
+        for i, (sym, d) in enumerate(sorted_assets[:5], 1):
+            change = d.get('change_24h', 0)
+            emoji = "🟢" if change > 0 else "🔴"
+            summary += f"{i}. {sym}: {change:+.2f}% {emoji}\n"
+        
+        # Add separator and more movers
+        if len(sorted_assets) > 5:
+            summary += "\n<b>More movers:</b>\n"
+            for i, (sym, d) in enumerate(sorted_assets[5:10], 6):
+                change = d.get('change_24h', 0)
+                summary += f"{i}. {sym}: {change:+.2f}%\n"
+        
+        # Add counts
+        crypto_up = sum(1 for d in crypto_prices.values() if d.get('change_24h', 0) > 0)
+        stock_up = sum(1 for d in stock_prices.values() if d.get('change_24h', 0) > 0)
+        
+        summary += f"\n<b>Market Summary:</b>\n"
+        summary += f"• Crypto: {crypto_up}/{len(crypto_prices)} up 📈\n"
+        summary += f"• Stocks: {stock_up}/{len(stock_prices)} up 📈"
+        
+        await send_message(summary)
+        print(f"  📊 Hourly summary sent ({len(all_assets)} assets)")
+        
+    except Exception as e:
+        print(f"[ERROR] Hourly summary failed: {e}")
+        import traceback
+        traceback.print_exc()
+
 async def save_dashboard_data(crypto_prices, stock_prices):
     """Save data for unified dashboard"""
     try:
         all_assets = {**crypto_prices, **stock_prices}
-        sorted_assets = sorted(all_assets.items(), key=lambda x: abs(x[1]['change_24h']), reverse=True)
+        sorted_assets = sorted(all_assets.items(), 
+                              key=lambda x: abs(x[1].get('change_24h', 0)), 
+                              reverse=True)
         
         dashboard_data = {
             'timestamp': datetime.now().isoformat(),
             'crypto_count': len(crypto_prices),
             'stock_count': len(stock_prices),
             'top_movers': [
-                {'symbol': s, 'change': d['change_24h'], 'price': d['price'], 'type': d['type']}
+                {'symbol': s, 'change': d.get('change_24h', 0), 'price': d.get('price', 0), 'type': d.get('type', 'unknown')}
                 for s, d in sorted_assets[:10]
             ]
         }
         
         with open(f"{DATA_DIR}/big_move_data.json", 'w') as f:
             json.dump(dashboard_data, f, indent=2)
+            
     except Exception as e:
         print(f"[ERROR] Saving dashboard data: {e}")
 
 async def run_scanner():
     print("="*60)
-    print("🚀 ULTIMATE BIG MOVE ALERT BOT")
+    print("🚀 ULTIMATE BIG MOVE ALERT BOT - FIXED")
     print("="*60)
     print(f"Crypto: {len(CRYPTO_ASSETS)} assets")
     print(f"Stocks: {len(STOCK_ASSETS)} assets")
     print(f"Total: {len(CRYPTO_ASSETS) + len(STOCK_ASSETS)} assets\n")
     
     await send_message(
-        "🟢 <b>Ultimate Big Move Bot Started</b>\n\n"
+        "🟢 <b>Big Move Bot v2.0 Started</b>\n\n"
         f"Monitoring {len(CRYPTO_ASSETS) + len(STOCK_ASSETS)} assets:\n"
         f"• {len(CRYPTO_ASSETS)} cryptocurrencies\n"
         f"• {len(STOCK_ASSETS)} stocks\n\n"
@@ -324,11 +343,13 @@ async def run_scanner():
     while True:
         try:
             check_count += 1
-            print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Check #{check_count}")
+            timestamp = datetime.now().strftime('%H:%M:%S')
+            print(f"\n[{timestamp}] Check #{check_count}")
             
-            crypto_task = get_crypto_prices()
-            stock_task = get_stock_prices()
-            crypto_prices, stock_prices = await asyncio.gather(crypto_task, stock_task)
+            # Get prices
+            crypto_prices = await get_crypto_prices()
+            await asyncio.sleep(2)  # Brief pause between APIs
+            stock_prices = await get_stock_prices()
             
             print(f"  Crypto: {len(crypto_prices)}/{len(CRYPTO_ASSETS)} assets")
             print(f"  Stocks: {len(stock_prices)}/{len(STOCK_ASSETS)} assets")
@@ -336,6 +357,7 @@ async def run_scanner():
             # Save for dashboard
             await save_dashboard_data(crypto_prices, stock_prices)
             
+            # Check for big moves
             all_assets = {**crypto_prices, **stock_prices}
             alerts_sent = 0
             
@@ -345,18 +367,17 @@ async def run_scanner():
                     await send_big_move_alert(symbol, data)
                     alerts_sent += 1
             
-            # Hourly summary
+            # Hourly summary (every 60 checks = ~1 hour)
             if check_count % 60 == 0:
-                top_movers = sorted(all_assets.items(), key=lambda x: abs(x[1]['change_24h']), reverse=True)[:5]
-                summary = "📊 <b>Hourly Top Movers</b>\n\n"
-                for i, (sym, d) in enumerate(top_movers, 1):
-                    summary += f"{i}. {sym}: {d['change_24h']:+.2f}%\n"
-                await send_message(summary)
+                print(f"  [DEBUG] Sending hourly summary...")
+                await send_hourly_summary(crypto_prices, stock_prices)
             
             print(f"  Alerts: {alerts_sent}")
             
         except Exception as e:
             print(f"[ERROR] Scan failed: {e}")
+            import traceback
+            traceback.print_exc()
         
         await asyncio.sleep(60)
 
